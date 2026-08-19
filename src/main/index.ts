@@ -2,18 +2,22 @@
  * Electron Main 入口
  *
  * P0 階段：極簡版，只做 wiring
+ * P1 階段：加入 audio ingest 接收（ASR 留 P1 stage 2）
+ *
+ * 職責：
  * - 建立 settings 視窗
  * - 建立系統匣
  * - 註冊全域熱鍵
- * - 處理 IPC（GET_SETTINGS / SAVE_SETTINGS / SHOW_SETTINGS）
+ * - 處理 IPC（GET_SETTINGS / SAVE_SETTINGS / SHOW_SETTINGS / AUDIO_CHUNK）
  */
 
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { IPC } from '../shared/ipc-channels';
 import { appState } from './app-state';
-import { createMainWindow, showMainWindow, getMainWindow } from './windows';
+import { createMainWindow, showMainWindow } from './windows';
 import { createTray, destroyTray } from './tray';
 import { hotkeyManager } from '../functions/hotkey/manager';
+import { audioIngest } from '../functions/audio/ingest';
 import { lifecycle } from './lifecycle';
 import { DEFAULT_HOTKEY } from '../shared/constants';
 import type { AppSettings } from '../shared/types';
@@ -38,10 +42,13 @@ if (!gotTheLock) {
       console.warn(`[main] hotkey ${DEFAULT_HOTKEY} register failed`);
     }
 
-    // 3. IPC handlers
+    // 3. 音訊 ingest wiring
+    wireAudioIngest();
+
+    // 4. IPC handlers
     registerIpcHandlers();
 
-    // 4. macOS 特殊處理（雖然 P0 是 Windows 優先）
+    // 5. macOS 特殊處理（雖然 P0 是 Windows 優先）
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         createMainWindow();
@@ -62,7 +69,31 @@ if (!gotTheLock) {
   app.on('before-quit', () => {
     lifecycle.isQuitting = true;
     hotkeyManager.unregister();
+    audioIngest.stop();
     destroyTray();
+  });
+}
+
+/**
+ * 連接 audio.ingest 的 level event 到 indicator renderer（broadcast）
+ * 階段 4 會接真正的 indicator window；現在先 broadcast 給所有 renderer
+ */
+function wireAudioIngest(): void {
+  audioIngest.on('level', (level) => {
+    // 廣播到所有 renderer（目前只有 settings window，stage 4 加 indicator window）
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send(IPC.INDICATOR_LEVEL, { level, timestamp: Date.now() });
+      }
+    }
+  });
+
+  audioIngest.on('chunk', (samples, sampleRate) => {
+    // 階段 2 會把這個 listener 接到 ASR engine
+    // 階段 1 暫時只 log
+    if (process.env.SPEAK2T_DEBUG_AUDIO === '1') {
+      console.log(`[main] audio chunk: ${samples.length} samples @ ${sampleRate}Hz`);
+    }
   });
 }
 
@@ -88,12 +119,18 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.SHOW_SETTINGS, () => {
     showMainWindow();
   });
+
+  // Audio chunk 接收
+  ipcMain.on(IPC.AUDIO_CHUNK, (_event, payload: { samples: Float32Array; sampleRate: number }) => {
+    audioIngest.feed(payload.samples, payload.sampleRate);
+  });
 }
 
 // 廣播 status 變更給所有 renderer
 appState.on('status:changed', (next) => {
-  const win = getMainWindow();
-  if (win && !win.isDestroyed()) {
-    win.webContents.send(IPC.STATUS_CHANGED, { status: next });
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send(IPC.STATUS_CHANGED, { status: next });
+    }
   }
 });
