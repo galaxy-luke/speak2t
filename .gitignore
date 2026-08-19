@@ -1,0 +1,53 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build output
+dist/
+out/
+build/
+release/
+
+# Vite cache
+.vite/
+*.tsbuildinfo
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# OS
+.DS_Store
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Models（ASR 模型不進 git，user 自行下載）
+models/
+*.bin
+*.onnx
+
+# Test
+test-results/
+playwright-report/
+
+# User-specific
+.notes/
+.tmp/

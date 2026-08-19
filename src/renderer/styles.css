@@ -1,0 +1,177 @@
+/* P0 簡單樣式 */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft JhengHei',
+    'PingFang TC', 'Noto Sans TC', sans-serif;
+  background: #1a1a1a;
+  color: #e0e0e0;
+}
+
+body {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.container {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 24px;
+  position: relative;
+}
+
+h1 {
+  font-size: 28px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.subtitle {
+  color: #888;
+  font-size: 13px;
+  margin-bottom: 24px;
+}
+
+.card {
+  background: #242424;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+
+.card h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #4a9eff;
+}
+
+.card p {
+  color: #ccc;
+  margin-bottom: 8px;
+}
+
+.card dl {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 8px 16px;
+  font-size: 13px;
+}
+
+.card dt {
+  color: #888;
+}
+
+.card dd code {
+  background: #1a1a1a;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #ffd966;
+}
+
+code {
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 12px;
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.status-idle {
+  background: #4a9eff;
+}
+.status-recording {
+  background: #ff5252;
+  animation: pulse 1s infinite;
+}
+.status-processing {
+  background: #ffd966;
+}
+.status-paused {
+  background: #888;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.hotkey-test {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+kbd {
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-family: 'Cascadia Code', monospace;
+  font-size: 13px;
+  color: #ffd966;
+}
+
+.count {
+  color: #888;
+  font-size: 13px;
+}
+
+.hint {
+  color: #888;
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+.toast {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #4a9eff;
+  color: #fff;
+  padding: 12px 24px;
+  border-radius: 24px;
+  font-weight: 500;
+  font-size: 14px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  animation: slide-up 0.2s ease-out;
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
