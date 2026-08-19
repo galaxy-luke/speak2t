@@ -1,6 +1,6 @@
 # Speak2T — 語音輸入轉文字工具 規劃書
 
-> **狀態**: v1.0 ✅（D-1 ~ D-10 + O-1 ~ O-4 全部決策已確認）
+> **狀態**: v1.2 ✅（D-4 / D-5 雙引擎：sherpa-onnx-streaming 預設 + whisper.cpp 備援）
 > **建立日期**: 2026-08-19
 > **最後更新**: 2026-08-19
 > **目標平台**: Windows 11 優先（後續 macOS）
@@ -363,8 +363,8 @@ speak2t/
 | **D-1** | 預設錄音模式 | ✅ **兩種都給，user 設定切換** | 預設長壓 Push-to-Talk |
 | **D-2** | 指示器位置 | ✅ **兩種都給，user 設定切換** | 預設螢幕底部中央 |
 | **D-3** | 打包工具 | ✅ **electron-builder** | NSIS 安裝檔，可指定安裝路徑 |
-| **D-4** | ASR 引擎 | ✅ **sherpa-onnx** | 設定中可加 whisper.cpp 備案 |
-| **D-5** | 預設模型 | ✅ **sherpa-onnx-streaming-zh-en** | 中英混講，~200MB；可切換 `paraformer-zh`（純繁中 40MB） |
+| **D-4** | ASR 引擎 | ✅ **sherpa-onnx-streaming（預設）+ whisper.cpp（備援）**（v1.2 修訂）| 雙引擎架構：低延遲預設 + 高品質備援，設定可切換 |
+| **D-5** | 預設模型 | ✅ **sherpa-onnx-streaming-zh-en（預設）+ Whisper-small-zh_tw（備援）**（v1.2 修訂）| 預設取延遲優勢；備援取台灣腔調品質 |
 | **D-6** | 注入方式 | ✅ **兩種都給，user 設定切換** | 預設剪貼簿 + 自動 Ctrl+V；可切換純模擬按鍵 |
 | **D-7** | 開機自動啟動 | ✅ **首次啟動彈小窗詢問** | 不預設啟動，由 user 決定 |
 | **D-8** | 開源授權 | ✅ **MIT** | 最寬鬆、商業可用 |
@@ -375,7 +375,12 @@ speak2t/
 
 - D-1（兩種模式）：UI 需提供「模式切換」設定項；hotkey 狀態機需支援 PTT / Toggle 兩種
 - D-2（兩種位置）：indicator window manager 需支援 `bottom-center` / `follow-cursor` 兩策略
-- D-4 + D-5：採用 sherpa-onnx 為主引擎，ASR 抽象介面允許載入不同模型
+- **D-4 + D-5（v1.2 修訂 — 雙引擎）**：
+  - 預設 `sherpa-onnx-streaming`：低延遲（100-300ms）、無幻覺、輕量，邊講邊出字
+  - 備援 `whisper.cpp + Whisper-small-zh_tw`：台灣腔調品質高、繁中直出、中英混優
+  - 設定頁可切換（讓使用者根據自己的筆電性能 + 語音場景選）
+  - 抽象介面 `ASR engine` 同時支援兩種實作
+  - 整合時程：P1 先做 sherpa-onnx-streaming 主線，視台灣腔調表現再決定是否加 whisper.cpp
 - D-6（兩種注入）：injector 模組需設計策略切換器；剪貼簿注入要實作備份+還原
 - D-9（兩種路徑）：模型路徑存到 settings，可從設定頁改
 - D-10（手動/自動）：首次啟動流程：偵測模型 → 缺模型時彈下載提示窗（預設）或直接背景下載
@@ -466,8 +471,10 @@ speak2t/
 
 ```
 技術棧: Node 20 / Electron 30+ / TypeScript 5 / React 18 / Vite 5
-ASR: sherpa-onnx + paraformer-zh-small（純繁中優先，P0 階段）
-    升級到 sherpa-onnx-streaming-zh-en（中英混）放 P1
+ASR (v1.2 雙引擎):
+  - 預設: sherpa-onnx-streaming + sherpa-onnx-streaming-zh-en（低延遲，~200MB）
+  - 備援: whisper.cpp + Whisper-small-zh_tw（台灣腔調，INT8 量化 ~460MB）
+  - 設定頁可切換
 注入: 剪貼簿 + 自動 Ctrl+V（P0）
 打包: electron-builder（P4 階段）
 模式: 長壓（預設）
@@ -478,9 +485,21 @@ ASR: sherpa-onnx + paraformer-zh-small（純繁中優先，P0 階段）
 
 ---
 
-**版本**: v1.0 ✅
+**版本**: v1.2 ✅
 **維護者**: Luke
 **最後更新**: 2026-08-19
+
+### 變更記錄
+
+- **v1.2** (2026-08-19) — D-4 / D-5 改為**雙引擎**架構
+  - 預設 `sherpa-onnx-streaming`（拿低延遲 UX 優勢）
+  - 備援 `whisper.cpp + Whisper-small-zh_tw`（拿台灣腔調品質）
+  - 設定頁可切換
+  - 原因：v1.1 推薦 whisper.cpp 但忽略「語音輸入工具」最關鍵的延遲指標
+- **v1.1** (2026-08-19) — D-4 改 whisper.cpp、D-5 改 Whisper-small-zh_tw（基於實際 npm registry 與繁中品質評估）
+  - 原 D-4 = sherpa-onnx：因 `@nut-tree/nut-js` npm 套件 404 撤下，重新評估後 Whisper 對台灣繁中更優
+  - 影響：P1 實作時改用 whisper.cpp binding（`nodejs-whisper` 或 faster-whisper）
+- **v1.0** (2026-08-19) — D-1 ~ D-10 + O-1 ~ O-4 全部決策初版
 
 ---
 
