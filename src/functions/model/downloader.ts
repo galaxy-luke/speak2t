@@ -100,12 +100,39 @@ export declare interface ModelDownloader {
 /**
  * 內建模型清單（與 scripts/download-model.mjs MODELS 同步）
  * 兩邊都改才不會 drift，comment 有提示
+ *
+ * P5 新增：luigi-x-asr-zh-tw-en-ft75m（Luigi 繁中精調，2026-06，HF git LFS 多檔案）
+ *          sherpa-onnx-x-asr-480ms-streaming-zipformer-transducer-zh-en-punct-int8-2026-06-05（x-asr 簡中 480ms）
+ * 保留：sherpa-zh-en 經典版 v2023、whisper-small
  */
 const MODELS: Omit<ModelInfo, 'installed' | 'path'>[] = [
   {
+    key: 'luigi-x-asr-zh-tw-en-ft75m',
+    name: 'x-asr 繁中 (Luigi 75M)',
+    description: 'Luigi 微調 75M 串流（台灣國語 1560h 精調，~132 MB，自動加標點）',
+    preset: 'luigi-x-asr-zh-tw-en-ft75m',
+    sizeBytes: 138_200_625,
+    /**
+     * Luigi HF git LFS 4 個檔案都不附官方 digest（要自算）。
+     * 等首次下載後用 Get-FileHash 算出來回填到 scripts/download-model.mjs。
+     */
+    sha256: null, // TODO: 首次下載後用 Get-FileHash 算
+  },
+  {
+    key: 'x-asr-480ms-punct',
+    name: 'x-asr 簡中 480ms',
+    description: 'sherpa-onnx 官方 x-asr 簡中 480ms（int8，~128 MB，自動加標點）',
+    preset: 'sherpa-onnx-x-asr-480ms-streaming-zipformer-transducer-zh-en-punct-int8-2026-06-05',
+    sizeBytes: 133_895_136,
+    /**
+     * GitHub asset digest（官方）: 78796cd435de82b6bb413e5c3c3d5b4dcb9f7675ddfd33deed6fe1b9e1de0c45
+     */
+    sha256: '78796cd435de82b6bb413e5c3c3d5b4dcb9f7675ddfd33deed6fe1b9e1de0c45',
+  },
+  {
     key: 'sherpa-zh-en',
-    name: 'sherpa-onnx-streaming-zh-en',
-    description: 'sherpa-onnx 串流模型（中英混講，~340 MB）',
+    name: 'sherpa 經典版 (v2023)',
+    description: 'sherpa-onnx 串流模型（中英混講，~340 MB，無標點）',
     preset: 'sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20',
     sizeBytes: 357_564_000,
     sha256: '27ffbd9ee24ad186d99acc2f6354d7992b27bcab490812510665fa8f9389c5f8',

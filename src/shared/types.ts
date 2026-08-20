@@ -18,12 +18,18 @@ export type IndicatorPosition = 'bottom-center' | 'follow-cursor';
 export type AsrEngineType = 'sherpa-onnx' | 'whisper-cpp';
 
 /**
- * 預設 ASR 模型識別名（D-5）
+ * 預設 ASR 模型識別名（D-5 / P5）
  *
- * 注意：值就是模型解壓後的目錄名（GitHub release tarball 解出來的目錄名），
+ * 注意：值就是模型解壓後的目錄名（HF 檔案會放在以 preset 命名的目錄裡），
  * 這樣 AsrManager 直接拿這個值當 dirName，不用 mapping。
+ *
+ * P5 新增：luigi-x-asr-zh-tw-en-ft75m（Luigi 繁中精調，2026-06）
+ *          sherpa-onnx-x-asr-480ms-streaming-zipformer-transducer-zh-en-punct-int8-2026-06-05（x-asr 簡中 480ms）
+ * 保留：sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20（經典版 v2023）
  */
 export type AsrModelPreset =
+  | 'luigi-x-asr-zh-tw-en-ft75m'
+  | 'sherpa-onnx-x-asr-480ms-streaming-zipformer-transducer-zh-en-punct-int8-2026-06-05'
   | 'sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20'
   | 'whisper-small';
 
@@ -64,7 +70,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
   // P1
   asrEngine: 'sherpa-onnx', // D-B 預設 streaming
-  asrModelPreset: 'sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20', // D-5
+  asrModelPreset: 'luigi-x-asr-zh-tw-en-ft75m', // P5 新預設：Luigi 繁中精調（速度+字義+標點）
   audioSampleRate: 16000,
   customModelPath: '',
   /** 麥克風 deviceId（空字串 = 系統預設；P1 stage 6.5） */

@@ -33,10 +33,66 @@ import { Readable } from 'node:stream';
 const JSON_MODE = process.argv.includes('--json');
 
 // ===== 模型清單（與 src/functions/model/downloader.ts 同步）=====
+// 支援兩種類型：
+//   type='tarbz2' (預設) — 單一 tar.bz2 下載 + 解壓
+//   type='multifile'       — 多個獨立檔案（HF LFS 等），下載後直接放到 targetDir
 const MODELS = {
+  // P5 新預設：Luigi 繁中精調版（HF git LFS 多檔案，無壓縮）
+  'luigi-x-asr-zh-tw-en-ft75m': {
+    name: 'x-asr 繁中 (Luigi 75M)',
+    description: 'Luigi 微調 75M 串流（台灣國語 1560h 精調，~132 MB，自動加標點）',
+    type: 'multifile',
+    /** 用於 AsrManager 的 preset 名（要對齊 src/shared/types.ts 的 AsrModelPreset） */
+    preset: 'luigi-x-asr-zh-tw-en-ft75m',
+    /** 預期下載大小總計（bytes，UI 顯示用） */
+    sizeBytes: 138200625, // 121039545 + 13877277 + 3228486 + 56317 = ~132MB
+    /** 4 個獨立檔案（HF git LFS） */
+    files: [
+      {
+        url: 'https://huggingface.co/Luigi/x-asr-zh-tw-en-streaming-ft75m/resolve/main/encoder.int8.onnx',
+        filename: 'encoder.int8.onnx',
+        sizeBytes: 121039545,
+        sha256: null, // TODO: 首次下載後用 Get-FileHash 算
+      },
+      {
+        url: 'https://huggingface.co/Luigi/x-asr-zh-tw-en-streaming-ft75m/resolve/main/decoder.onnx',
+        filename: 'decoder.onnx',
+        sizeBytes: 13877277,
+        sha256: null, // TODO: 首次下載後用 Get-FileHash 算
+      },
+      {
+        url: 'https://huggingface.co/Luigi/x-asr-zh-tw-en-streaming-ft75m/resolve/main/joiner.int8.onnx',
+        filename: 'joiner.int8.onnx',
+        sizeBytes: 3228486,
+        sha256: null, // TODO: 首次下載後用 Get-FileHash 算
+      },
+      {
+        url: 'https://huggingface.co/Luigi/x-asr-zh-tw-en-streaming-ft75m/resolve/main/tokens.txt',
+        filename: 'tokens.txt',
+        sizeBytes: 56317,
+        sha256: null, // TODO: 首次下載後用 Get-FileHash 算
+      },
+    ],
+  },
+  // P5 新增：sherpa-onnx 官方 x-asr 簡中 480ms (int8 + 自動加標點)
+  'x-asr-480ms-punct': {
+    name: 'x-asr 簡中 480ms',
+    description: 'sherpa-onnx 官方 x-asr 簡中 480ms（int8，~128 MB，自動加標點）',
+    url: 'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-x-asr-480ms-streaming-zipformer-transducer-zh-en-punct-int8-2026-06-05.tar.bz2',
+    archive: 'tar.bz2',
+    extractedDir: 'sherpa-onnx-x-asr-480ms-streaming-zipformer-transducer-zh-en-punct-int8-2026-06-05',
+    cleanup: [],
+    preset: 'sherpa-onnx-x-asr-480ms-streaming-zipformer-transducer-zh-en-punct-int8-2026-06-05',
+    sizeBytes: 133895136,
+    /**
+     * GitHub asset digest（官方）: 78796cd435de82b6bb413e5c3c3d5b4dcb9f7675ddfd33deed6fe1b9e1de0c45
+     */
+    sha256: '78796cd435de82b6bb413e5c3c3d5b4dcb9f7675ddfd33deed6fe1b9e1de0c45',
+  },
+  // 既有：sherpa-zh-en 經典版 v2023
   'sherpa-zh-en': {
-    name: 'sherpa-onnx-streaming-zh-en',
-    description: 'sherpa-onnx 串流模型（中英混講，~340 MB）',
+    name: 'sherpa 經典版 (v2023)',
+    description: 'sherpa-onnx 串流模型（中英混講，~340 MB，無標點）',
     url: 'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20.tar.bz2',
     archive: 'tar.bz2',
     /** 解壓後的目錄名（要原封不動） */
@@ -316,12 +372,14 @@ function sha256OfFile(filePath) {
  * - expected 為 null → 跳過（僅計算並報告實際 hash）
  * - 對上 → 回傳 { ok: true, actual }
  * - 不對 → 刪除檔案 + 拋錯（emitError）
+ * @param {string} [displayName] - multi-file 模式下顯示檔名用（例: "encoder.int8.onnx"）
  */
-async function verifyDownloadedFile(filePath, expected) {
+async function verifyDownloadedFile(filePath, expected, displayName) {
+  const label = displayName ? `${displayName} (${filePath})` : filePath;
   if (JSON_MODE) {
-    emit({ event: 'phase', phase: 'verifying', message: `驗證 SHA-256：${filePath}` });
+    emit({ event: 'phase', phase: 'verifying', message: `驗證 SHA-256：${label}` });
   } else {
-    console.log(`\n驗證 SHA-256：${filePath}`);
+    console.log(`\n驗證 SHA-256：${label}`);
   }
   const actual = await sha256OfFile(filePath);
   if (JSON_MODE) {
@@ -344,7 +402,7 @@ async function verifyDownloadedFile(filePath, expected) {
       rmSync(filePath, { force: true });
     }
     throw new Error(
-      `SHA-256 驗證失敗：預期 ${expected}，實際 ${actual}（檔案可能損毀或被竄改，已刪除）`
+      `SHA-256 驗證失敗：${label} 預期 ${expected}，實際 ${actual}（檔案可能損毀或被竄改，已刪除）`
     );
   }
   if (JSON_MODE) {
@@ -402,6 +460,160 @@ function cleanupDir(dir, patterns) {
   }
 }
 
+/**
+ * Multi-file 模型下載（如 Luigi HF LFS）
+ * 依序下載每個檔案到 targetDir，每個檔案可選驗證 SHA-256
+ * 進度回報：累計 bytes / totalBytes
+ */
+async function downloadMultifileModel(model, targetDir, tmpDir) {
+  if (!model.files || model.files.length === 0) {
+    throw new Error('multifile model 必須設定 files');
+  }
+
+  // 計算 total + 起始 emit start
+  const total = model.files.reduce((s, f) => s + f.sizeBytes, 0);
+  if (JSON_MODE) {
+    emit({ event: 'start', total, sizeBytes: total });
+  }
+
+  let downloaded = 0;
+  const fileHashes = {}; // filename → { actual, expected, skipped }
+
+  for (let i = 0; i < model.files.length; i++) {
+    if (cancelled) {
+      throw new Error('cancelled');
+    }
+    const file = model.files[i];
+    const tmpFile = join(tmpDir, `${Date.now()}-${i}-${file.filename}`);
+    const finalFile = join(targetDir, file.filename);
+
+    if (!JSON_MODE) {
+      console.log(`\n📥 [${i + 1}/${model.files.length}] ${file.filename}（${formatBytes(file.sizeBytes)}）`);
+      console.log(`   URL: ${file.url}`);
+    } else {
+      emit({
+        event: 'phase',
+        phase: 'downloading',
+        message: `[${i + 1}/${model.files.length}] ${file.filename}（${formatBytes(file.sizeBytes)}）`,
+      });
+    }
+
+    // 下載單一檔案（含進度計算：本次下載的 bytes 算到 cumulative）
+    try {
+      await downloadSingleFileWithOffset(file.url, tmpFile, file.sizeBytes, downloaded, total);
+    } catch (err) {
+      if (cancelled) {
+        if (existsSync(tmpFile)) rmSync(tmpFile, { force: true });
+        throw new Error('cancelled');
+      }
+      // 帶詳細錯誤資訊
+      const wrapped = new Error(err.message);
+      wrapped.url = err.url ?? file.url;
+      wrapped.httpStatus = err.httpStatus;
+      wrapped.cause = err.cause;
+      throw wrapped;
+    }
+    downloaded += file.sizeBytes;
+
+    // SHA-256 校驗（per-file）
+    const verifyResult = await verifyDownloadedFile(tmpFile, file.sha256 ?? null, file.filename);
+    fileHashes[file.filename] = verifyResult;
+
+    // 從 tmp 搬到 targetDir
+    if (existsSync(finalFile)) {
+      rmSync(finalFile, { force: true });
+    }
+    renameSync(tmpFile, finalFile);
+    if (!JSON_MODE) {
+      console.log(`  ✓ 已存到：${finalFile}`);
+    }
+  }
+
+  return { fileHashes, total };
+}
+
+/**
+ * 單一檔案下載（multi-file 子流程），進度回報會加到 cumulative offset
+ */
+async function downloadSingleFileWithOffset(url, destPath, fileSize, baseDownloaded, total) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30_000);
+  let response;
+  try {
+    response = await fetch(url, { redirect: 'follow', signal: controller.signal });
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error('下載超時（30 秒）');
+    }
+    throw err;
+  }
+  clearTimeout(timeoutId);
+  if (!response.ok) {
+    const httpErr = new Error(`HTTP ${response.status} ${response.statusText}`);
+    httpErr.httpStatus = response.status;
+    httpErr.url = url;
+    throw httpErr;
+  }
+  if (!response.body) {
+    throw new Error('response body is null');
+  }
+
+  const fileStream = createWriteStream(destPath);
+  const nodeStream = Readable.fromWeb(response.body);
+  let fileDownloaded = 0;
+  const startTime = Date.now();
+  let lastReportTime = startTime;
+  let lastDownloaded = 0;
+
+  try {
+    for await (const chunk of nodeStream) {
+      if (cancelled) {
+        fileStream.destroy();
+        throw new Error('cancelled');
+      }
+      fileDownloaded += chunk.length;
+      if (!fileStream.write(chunk)) {
+        await new Promise((resolve) => fileStream.once('drain', resolve));
+      }
+      const now = Date.now();
+      const dt = (now - lastReportTime) / 1000;
+      if (dt > 0.2 || (baseDownloaded + fileDownloaded) === total) {
+        const speed = dt > 0 ? (fileDownloaded - lastDownloaded) / dt : 0;
+        lastDownloaded = fileDownloaded;
+        lastReportTime = now;
+        const cumulative = baseDownloaded + fileDownloaded;
+        const elapsed = (now - startTime) / 1000;
+        const remaining = speed > 0 ? (total - cumulative) / speed : 0;
+        const pct = total > 0 ? (cumulative / total) * 100 : 0;
+        if (JSON_MODE) {
+          emit({
+            event: 'progress',
+            phase: 'downloading',
+            downloaded: cumulative,
+            total,
+            percent: Math.round(pct * 10) / 10,
+            speedBps: Math.round(speed),
+            remainingSec: Math.round(remaining),
+            elapsedMs: Math.round(elapsed * 1000),
+          });
+        } else {
+          const line =
+            `\r  ${formatBytes(cumulative)} / ${formatBytes(total)} ` +
+            `(${(pct).toFixed(1)}%) ${humanSpeed(speed)} ` +
+            `${total > 0 ? `剩 ${timeRemaining(remaining)}` : ''}   `;
+          process.stdout.write(line);
+        }
+      }
+    }
+  } finally {
+    await new Promise((resolve, reject) => {
+      fileStream.end((err) => (err ? reject(err) : resolve()));
+    });
+  }
+  if (!JSON_MODE) process.stdout.write('\n');
+}
+
 // ===== Main =====
 async function main() {
   // 過濾掉 flag 參數，只留「位置參數」（模型 key）
@@ -417,6 +629,7 @@ async function main() {
         preset: m.preset,
         sizeBytes: m.sizeBytes,
         targetPath: getModelDir(m.preset),
+        type: m.type ?? 'tarbz2',
       }));
       process.stdout.write(JSON.stringify({ event: 'list', models: list }) + '\n');
     } else {
@@ -424,8 +637,13 @@ async function main() {
       for (const [key, m] of Object.entries(MODELS)) {
         console.log(`  ${key}`);
         console.log(`    描述：${m.description}`);
-        console.log(`    URL：${m.url}`);
-        console.log(`    下載目標：${getModelDir(m.preset)}\n`);
+        if (m.type === 'multifile') {
+          console.log(`    類型：multi-file（${m.files.length} 個獨立檔案）`);
+          console.log(`    下載目標：${getModelDir(m.preset)}\n`);
+        } else {
+          console.log(`    URL：${m.url}`);
+          console.log(`    下載目標：${getModelDir(m.preset)}\n`);
+        }
       }
     }
     return;
@@ -482,7 +700,11 @@ async function main() {
   if (!JSON_MODE) {
     console.log(`\n📦 ${model.name}`);
     console.log(`   ${model.description}`);
-    console.log(`   URL: ${model.url}`);
+    if (model.type === 'multifile') {
+      console.log(`   類型：multi-file（${model.files.length} 個獨立檔案）`);
+    } else if (model.url) {
+      console.log(`   URL: ${model.url}`);
+    }
     if (model.sha256) console.log(`   SHA-256: ${model.sha256}`);
     console.log();
   }
@@ -519,10 +741,52 @@ async function main() {
   // 下載到 tmp
   const tmpDir = join(tmpdir(), 'speak2t-downloads');
   mkdirSync(tmpDir, { recursive: true });
-  const archiveName = model.url.split('/').pop() ?? 'model';
-  const tmpArchive = join(tmpDir, `${Date.now()}-${archiveName}`);
 
   const downloadStart = Date.now();
+
+  // ====== 分流：multifile vs tar.bz2/bin ======
+  if (model.type === 'multifile') {
+    // Multi-file 模式：直接下載到 targetDir（已是解開格式，無需解壓）
+    mkdirSync(targetDir, { recursive: true });
+    try {
+      await downloadMultifileModel(model, targetDir, tmpDir);
+    } catch (err) {
+      if (cancelled) {
+        rmSync(targetDir, { recursive: true, force: true });
+        process.exit(130);
+      }
+      // 下載失敗 → 刪除整個 targetDir（避免半殘檔案）
+      rmSync(targetDir, { recursive: true, force: true });
+      if (JSON_MODE) {
+        emitError(`下載失敗：${err.message}`, 'download_failed', {
+          url: err.url,
+          httpStatus: err.httpStatus,
+          cause: err.cause?.message ?? err.code ?? null,
+          stack: (err.stack ?? '').split('\n')[0],
+        });
+      } else {
+        console.error(`\n✗ 下載失敗：${err.message}`);
+        if (err.cause) console.error(`   原因：${err.cause.message ?? err.cause}`);
+        if (err.httpStatus) console.error(`   HTTP status: ${err.httpStatus}`);
+      }
+      process.exit(1);
+    }
+
+    const durationMs = Date.now() - downloadStart;
+    if (JSON_MODE) {
+      emit({ event: 'done', path: targetDir, durationMs, sha256: null });
+    } else {
+      console.log(`\n✅ 模型下載完成！`);
+      console.log(`   路徑：${targetDir}`);
+      console.log(`\n請重啟 Speak2T app 載入模型。`);
+    }
+    return;
+  }
+
+  // ====== 原流程：tar.bz2 / bin ======
+  const archiveName = model.url?.split('/').pop() ?? 'model';
+  const tmpArchive = join(tmpDir, `${Date.now()}-${archiveName}`);
+
   try {
     await downloadFile(model.url, tmpArchive);
   } catch (err) {

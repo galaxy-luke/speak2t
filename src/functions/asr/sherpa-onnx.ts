@@ -39,17 +39,13 @@ export class SherpaOnnxEngine extends EventEmitter implements AsrEngine {
 
   /**
    * 從 sampleRate 抽出 recognizer 設定（sherpa-onnx feat config）
+   * 依 modelPreset 動態選檔名：
+   * - Luigi ft75m / x-asr 系列：新版檔名（`encoder.int8.onnx` / `decoder.onnx` / `joiner.int8.onnx`）
+   * - sherpa-zh-en 經典版：舊版檔名（`encoder-epoch-99-avg-1.int8.onnx` / `decoder-epoch-99-avg-1.onnx` / `joiner-epoch-99-avg-1.int8.onnx`）
    */
   private buildRecognizerConfig(modelDir: string, sampleRate: number): OnlineRecognizerConfig {
-    // int8 模型檔案較小，優先使用
-    const encoder = join(modelDir, 'encoder-epoch-99-avg-1.onnx');
-    const encoderInt8 = join(modelDir, 'encoder-epoch-99-avg-1.int8.onnx');
-    const decoder = join(modelDir, 'decoder-epoch-99-avg-1.onnx');
-    const joiner = join(modelDir, 'joiner-epoch-99-avg-1.onnx');
+    const { encoder, decoder, joiner } = this.resolveModelPaths(modelDir);
     const tokens = join(modelDir, 'tokens.txt');
-
-    // 優先 int8
-    const finalEncoder = existsSync(encoderInt8) ? encoderInt8 : encoder;
 
     return {
       featConfig: {
@@ -58,7 +54,7 @@ export class SherpaOnnxEngine extends EventEmitter implements AsrEngine {
       },
       modelConfig: {
         transducer: {
-          encoder: finalEncoder,
+          encoder,
           decoder,
           joiner,
         },
@@ -73,6 +69,41 @@ export class SherpaOnnxEngine extends EventEmitter implements AsrEngine {
       rule2MinTrailingSilence: 1.2,
       rule3MinUtteranceLength: 20,
       decodingMethod: 'greedy_search',
+    };
+  }
+
+  /**
+   * 依檔名慣例解析 encoder/decoder/joiner 路徑
+   * P5：Luigi ft75m 與 x-asr 系列用新版檔名；sherpa-zh-en 經典版用舊版檔名
+   */
+  private resolveModelPaths(modelDir: string): { encoder: string; decoder: string; joiner: string } {
+    // 新版檔名（Luigi / x-asr 系列）
+    const newEncoder = join(modelDir, 'encoder.onnx');
+    const newEncoderInt8 = join(modelDir, 'encoder.int8.onnx');
+    const newDecoder = join(modelDir, 'decoder.onnx');
+    const newJoiner = join(modelDir, 'joiner.onnx');
+    const newJoinerInt8 = join(modelDir, 'joiner.int8.onnx');
+
+    // 舊版檔名（sherpa-zh-en 經典版 v2023）
+    const oldEncoder = join(modelDir, 'encoder-epoch-99-avg-1.onnx');
+    const oldEncoderInt8 = join(modelDir, 'encoder-epoch-99-avg-1.int8.onnx');
+    const oldDecoder = join(modelDir, 'decoder-epoch-99-avg-1.onnx');
+    const oldJoiner = join(modelDir, 'joiner-epoch-99-avg-1.onnx');
+    const oldJoinerInt8 = join(modelDir, 'joiner-epoch-99-avg-1.int8.onnx');
+
+    // 優先偵測新版檔名（Luigi / x-asr）
+    if (existsSync(newEncoderInt8) || existsSync(newEncoder)) {
+      return {
+        encoder: existsSync(newEncoderInt8) ? newEncoderInt8 : newEncoder,
+        decoder: newDecoder,
+        joiner: existsSync(newJoinerInt8) ? newJoinerInt8 : newJoiner,
+      };
+    }
+    // fallback 舊版檔名（sherpa-zh-en 經典版）
+    return {
+      encoder: existsSync(oldEncoderInt8) ? oldEncoderInt8 : oldEncoder,
+      decoder: oldDecoder,
+      joiner: existsSync(oldJoinerInt8) ? oldJoinerInt8 : oldJoiner,
     };
   }
 
