@@ -36,10 +36,13 @@ function resolveAppIcon(): Electron.NativeImage | undefined {
 
 export function createMainWindow(): BrowserWindow {
   mainWindow = new BrowserWindow({
-    width: 900,
-    height: 650,
-    minWidth: 720,
-    minHeight: 480,
+    // 2026-08-20：user 把 default 視窗加大（寬 +20% / 高 +15%），min 等比放大
+    // 變更前：900×650 / min 720×480
+    // 變更後：1080×748 / min 864×552
+    width: 1080,
+    height: 748,
+    minWidth: 864,
+    minHeight: 552,
     show: false,
     title: '聲打 / Speak2T 設定',
     icon: resolveAppIcon(),
