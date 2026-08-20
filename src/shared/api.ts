@@ -61,6 +61,28 @@ export interface Speak2tApi {
   onIndicatorLevel: (callback: (data: IndicatorLevelPayload) => void) => () => void;
   /** P1：partial 文字（給 indicator renderer 用） */
   onIndicatorText: (callback: (data: IndicatorTextPayload) => void) => () => void;
+
+  // ===== P2 新增 =====
+
+  // model download（renderer → main）
+  /** 列出所有可用模型（含本機是否已安裝） */
+  listModels: () => Promise<ModelInfo[]>;
+  /** 啟動下載（async non-blocking，丟錯表示已在下載中或參數錯誤） */
+  downloadModel: (presetKey: string) => Promise<void>;
+  /** 取消當前下載 */
+  cancelDownload: () => Promise<void>;
+
+  // model download 事件訂閱
+  /** 下載進度 */
+  onDownloadProgress: (callback: (data: DownloadProgressPayload) => void) => () => void;
+  /** 下載完成 */
+  onDownloadComplete: (callback: (data: DownloadCompletePayload) => void) => () => void;
+  /** 下載失敗 */
+  onDownloadError: (callback: (data: DownloadErrorPayload) => void) => () => void;
+  /** 模型已存在 */
+  onDownloadExists: (callback: (data: DownloadExistsPayload) => void) => () => void;
+  /** 取消 */
+  onDownloadCancelled: (callback: (data: DownloadCancelledPayload) => void) => () => void;
 }
 
 // ===== 既有 payload =====
@@ -112,6 +134,61 @@ export interface IndicatorLevelPayload {
 /** partial 文字 */
 export interface IndicatorTextPayload {
   text: string;
+  timestamp: number;
+}
+
+// ===== P2 新增 payload =====
+
+/** 模型基本資訊 */
+export interface ModelInfo {
+  key: string;
+  name: string;
+  description: string;
+  preset: string;
+  sizeBytes: number;
+  path: string;
+  installed: boolean;
+}
+
+/** 下載進度 */
+export interface DownloadProgressPayload {
+  preset: string;
+  phase: 'downloading' | 'extracting' | 'cleanup' | 'done';
+  downloaded: number;
+  total: number;
+  percent: number;
+  speedBps: number;
+  remainingSec: number;
+  message?: string;
+  timestamp: number;
+}
+
+/** 下載完成 */
+export interface DownloadCompletePayload {
+  preset: string;
+  path: string;
+  durationMs: number;
+  timestamp: number;
+}
+
+/** 下載失敗 */
+export interface DownloadErrorPayload {
+  preset: string;
+  code: string;
+  message: string;
+  timestamp: number;
+}
+
+/** 模型已存在 */
+export interface DownloadExistsPayload {
+  preset: string;
+  path: string;
+  timestamp: number;
+}
+
+/** 取消下載 */
+export interface DownloadCancelledPayload {
+  preset: string;
   timestamp: number;
 }
 

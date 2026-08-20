@@ -798,3 +798,147 @@ kbd {
   color: #888;
   font-size: 14px;
 }
+
+/* ===== P2 Stage 2: 模型下載 UI ===== */
+
+.download-section {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid #2a2a2a;
+}
+
+.download-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #4a9eff;
+  margin-bottom: 8px;
+}
+
+.download-actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+}
+
+.model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.model-item {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 12px 16px;
+  transition: border-color 0.15s;
+}
+
+.model-item.active {
+  border-color: #4a9eff;
+}
+
+.model-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.model-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.model-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 4px;
+}
+
+.model-desc {
+  font-size: 12px;
+  color: #888;
+  margin-bottom: 6px;
+  line-height: 1.5;
+}
+
+.model-meta {
+  font-size: 11px;
+}
+
+.model-action {
+  flex-shrink: 0;
+}
+
+.model-msg {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.model-msg.success {
+  background: #1e3a1e;
+  color: #b8e6b8;
+}
+
+.model-msg.error {
+  background: #3a1e1e;
+  color: #ffb8b8;
+}
+
+.download-progress {
+  margin-top: 10px;
+}
+
+.progress-bar {
+  height: 8px;
+  background: #2a2a2a;
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4a9eff 0%, #66ff99 100%);
+  transition: width 0.2s linear;
+}
+
+.progress-fill.indeterminate {
+  width: 30%;
+  animation: progress-slide 1.2s infinite ease-in-out;
+}
+
+@keyframes progress-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+  font-size: 11px;
+  color: #aaa;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  gap: 8px;
+}
+
+.progress-info span {
+  white-space: nowrap;
+}
+
+.progress-message {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #aaa;
+  text-align: center;
+}

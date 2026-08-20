@@ -55,4 +55,26 @@ export const IPC = {
   INDICATOR_LEVEL: 'broadcast:indicator:level',
   /** partial 文字 */
   INDICATOR_TEXT: 'broadcast:indicator:text',
+
+  // ===== P2 新增 =====
+
+  // model download（renderer → main）
+  /** 列出所有可用模型（含本機是否已安裝） */
+  LIST_MODELS: 'invoke:model:list',
+  /** 啟動下載（async non-blocking） */
+  DOWNLOAD_MODEL: 'invoke:model:download',
+  /** 取消當前下載 */
+  CANCEL_DOWNLOAD: 'invoke:model:cancel',
+
+  // model download（main → renderer 廣播）
+  /** 下載進度 */
+  DOWNLOAD_PROGRESS: 'broadcast:download:progress',
+  /** 下載完成 */
+  DOWNLOAD_COMPLETE: 'broadcast:download:complete',
+  /** 下載失敗 */
+  DOWNLOAD_ERROR: 'broadcast:download:error',
+  /** 模型已存在（跳過下載） */
+  DOWNLOAD_EXISTS: 'broadcast:download:exists',
+  /** 使用者取消下載 */
+  DOWNLOAD_CANCELLED: 'broadcast:download:cancelled',
 } as const;

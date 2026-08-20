@@ -18,6 +18,12 @@ import type {
   IndicatorStatePayload,
   IndicatorLevelPayload,
   IndicatorTextPayload,
+  ModelInfo,
+  DownloadProgressPayload,
+  DownloadCompletePayload,
+  DownloadErrorPayload,
+  DownloadExistsPayload,
+  DownloadCancelledPayload,
 } from '../shared/api';
 
 const api: Speak2tApi = {
@@ -117,6 +123,40 @@ const api: Speak2tApi = {
     const listener = (_event: unknown, data: IndicatorTextPayload) => callback(data);
     ipcRenderer.on(IPC.INDICATOR_TEXT, listener);
     return () => ipcRenderer.removeListener(IPC.INDICATOR_TEXT, listener);
+  },
+
+  // ===== P2：模型下載 =====
+
+  // model download（renderer → main）
+  listModels: () => ipcRenderer.invoke(IPC.LIST_MODELS) as Promise<ModelInfo[]>,
+  downloadModel: (presetKey) => ipcRenderer.invoke(IPC.DOWNLOAD_MODEL, presetKey) as Promise<void>,
+  cancelDownload: () => ipcRenderer.invoke(IPC.CANCEL_DOWNLOAD) as Promise<void>,
+
+  // model download 事件訂閱
+  onDownloadProgress: (callback) => {
+    const listener = (_event: unknown, data: DownloadProgressPayload) => callback(data);
+    ipcRenderer.on(IPC.DOWNLOAD_PROGRESS, listener);
+    return () => ipcRenderer.removeListener(IPC.DOWNLOAD_PROGRESS, listener);
+  },
+  onDownloadComplete: (callback) => {
+    const listener = (_event: unknown, data: DownloadCompletePayload) => callback(data);
+    ipcRenderer.on(IPC.DOWNLOAD_COMPLETE, listener);
+    return () => ipcRenderer.removeListener(IPC.DOWNLOAD_COMPLETE, listener);
+  },
+  onDownloadError: (callback) => {
+    const listener = (_event: unknown, data: DownloadErrorPayload) => callback(data);
+    ipcRenderer.on(IPC.DOWNLOAD_ERROR, listener);
+    return () => ipcRenderer.removeListener(IPC.DOWNLOAD_ERROR, listener);
+  },
+  onDownloadExists: (callback) => {
+    const listener = (_event: unknown, data: DownloadExistsPayload) => callback(data);
+    ipcRenderer.on(IPC.DOWNLOAD_EXISTS, listener);
+    return () => ipcRenderer.removeListener(IPC.DOWNLOAD_EXISTS, listener);
+  },
+  onDownloadCancelled: (callback) => {
+    const listener = (_event: unknown, data: DownloadCancelledPayload) => callback(data);
+    ipcRenderer.on(IPC.DOWNLOAD_CANCELLED, listener);
+    return () => ipcRenderer.removeListener(IPC.DOWNLOAD_CANCELLED, listener);
   },
 };
 

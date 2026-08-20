@@ -1,18 +1,20 @@
 /**
  * ASR tab（P2 Stage 1 + Stage 2）
  *
- * Stage 1 內容：
+ * Stage 1：
  * - ASR 引擎選擇（sherpa-onnx / whisper.cpp）
  * - 模型 preset 選擇
  * - 自訂模型路徑
  *
- * Stage 2 內容（待補）：
+ * Stage 2：
  * - 模型下載 UI + 進度條
  * - 已下載狀態
  */
 
 import type { AppSettings, AsrEngineType, AsrModelPreset } from '../../../shared/types';
 import { AsrTester } from './AsrTester';
+import { ModelList } from './ModelList';
+import { useDownloadState } from '../hooks/useDownloadState';
 
 interface Props {
   draft: AppSettings;
@@ -48,6 +50,9 @@ const PRESET_OPTIONS: { value: AsrModelPreset; label: string; engine: AsrEngineT
 export function AsrTab({ draft, onChange }: Props) {
   // 過濾出當前引擎可用的 preset
   const availablePresets = PRESET_OPTIONS.filter((p) => p.engine === draft.asrEngine);
+
+  // P2 Stage 2：下載狀態
+  const download = useDownloadState();
 
   return (
     <div className="tab-pane">
@@ -103,9 +108,30 @@ export function AsrTab({ draft, onChange }: Props) {
               </option>
             ))}
           </select>
-          <p className="hint">
-            模型下載與狀態管理在 <strong>P2 Stage 2</strong> 補上（自動下載 UI + 進度條）。
-          </p>
+          <p className="hint">切換 preset 後按「儲存」，會自動重載 ASR 引擎。</p>
+        </div>
+      </section>
+
+      {/* P2 Stage 2：模型下載管理 */}
+      <section className="download-section">
+        <h3>模型下載管理</h3>
+        <p className="hint">下載到 <code>%APPDATA%\speak2t\models\&lt;preset&gt;\</code>，下載完成後 ASR 引擎會自動重載。</p>
+        {download.error && <p className="error">⚠️ {download.error}</p>}
+        <ModelList
+          models={download.models}
+          status={download.status}
+          onDownload={download.startDownload}
+          onCancel={download.cancelDownload}
+          loading={download.loading}
+        />
+        <div className="download-actions">
+          <button
+            className="btn btn-cancel"
+            onClick={() => void download.refresh()}
+            disabled={download.loading}
+          >
+            🔄 重新整理狀態
+          </button>
         </div>
       </section>
 

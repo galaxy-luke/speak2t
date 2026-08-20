@@ -5,14 +5,11 @@
  * 下載 ASR 模型到 %APPDATA%\speak2t\models\<preset>\
  *
  * 用法：
- *   node scripts/download-model.mjs                     → 互動選單
- *   node scripts/download-model.mjs sherpa-zh-en        → 直接下載
- *   node scripts/download-model.mjs whisper-small       → 直接下載
- *   node scripts/download-model.mjs --list              → 列出可用模型
- *
- * 下載目標：
- *   sherpa-zh-en  → GitHub Release tar.bz2（自動解壓）
- *   whisper-small → HuggingFace ggml-small.bin（直接存）
+ *   node scripts/download-model.mjs                            → 互動選單（CLI 模式）
+ *   node scripts/download-model.mjs sherpa-zh-en               → 直接下載（CLI 模式）
+ *   node scripts/download-model.mjs --json sherpa-zh-en        → JSON 事件流（main 進程用）
+ *   node scripts/download-model.mjs --list                     → 列出可用模型
+ *   node scripts/download-model.mjs --json --list              → 列出模型為 JSON
  *
  * 退出代碼：
  *   0 成功
@@ -20,6 +17,8 @@
  *   2 解壓失敗
  *   3 用戶取消
  *   4 參數錯誤
+ *   5 模型已存在（--json 模式）
+ *   130 收到 SIGTERM
  */
 
 import { createWriteStream, existsSync, mkdirSync, statSync, rmSync, renameSync, createReadStream } from 'node:fs';
@@ -30,7 +29,10 @@ import { createInterface } from 'node:readline';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 
-// ===== 模型清單 =====
+// ===== 模式 =====
+const JSON_MODE = process.argv.includes('--json');
+
+// ===== 模型清單（與 src/functions/model/downloader.ts 同步）=====
 const MODELS = {
   'sherpa-zh-en': {
     name: 'sherpa-onnx-streaming-zh-en',
@@ -43,6 +45,8 @@ const MODELS = {
     cleanup: ['test_wavs'],
     /** 用於 AsrManager 的 preset 名（要對齊 src/shared/types.ts 的 AsrModelPreset） */
     preset: 'sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20',
+    /** 預期下載大小（bytes，用於 UI 顯示） */
+    sizeBytes: 357564000,
   },
   'whisper-small': {
     name: 'whisper-small (ggml)',
@@ -52,8 +56,45 @@ const MODELS = {
     extractedDir: null,
     cleanup: [],
     preset: 'whisper-small',
+    sizeBytes: 462422000,
   },
 };
+
+// ===== 中止 flag =====
+let cancelled = false;
+
+// SIGTERM 處理：JSON 模式優雅退出
+if (JSON_MODE) {
+  process.on('SIGTERM', () => {
+    cancelled = true;
+    emit({ event: 'cancelled', message: '收到 SIGTERM，正在取消...' });
+    // 給點時間讓 stdout flush
+    setTimeout(() => process.exit(130), 100);
+  });
+  // 忽略 SIGINT (Ctrl+C)，避免誤觸（UI 用 cancelDownload 走 SIGTERM）
+  process.on('SIGINT', () => {
+    /* ignore */
+  });
+}
+
+// ===== 輸出輔助 =====
+function emit(obj) {
+  if (JSON_MODE) {
+    // 一行一個 JSON 事件
+    process.stdout.write(JSON.stringify(obj) + '\n');
+  } else {
+    // CLI 模式：console.log
+    if (obj.message) console.log(obj.message);
+  }
+}
+
+function emitError(message, code = 'error') {
+  if (JSON_MODE) {
+    process.stdout.write(JSON.stringify({ event: 'error', code, message }) + '\n');
+  } else {
+    console.error(`錯誤：${message}`);
+  }
+}
 
 // ===== 工具 =====
 function getAppDataDir() {
@@ -128,7 +169,11 @@ async function pickModel() {
  * @returns 下載的位元組數
  */
 async function downloadFile(url, destPath) {
-  console.log(`下載中: ${url}`);
+  if (!JSON_MODE) {
+    console.log(`下載中: ${url}`);
+  } else {
+    emit({ event: 'phase', phase: 'downloading', message: `下載中: ${url}` });
+  }
   const startTime = Date.now();
   let lastReportTime = startTime;
   let lastDownloaded = 0;
@@ -144,29 +189,47 @@ async function downloadFile(url, destPath) {
   const total = parseInt(response.headers.get('content-length') ?? '0', 10);
   const fileStream = createWriteStream(destPath);
 
+  // 通知開始（含總大小）
+  emit({ event: 'start', total, sizeBytes: total });
+
   let downloaded = 0;
-  // Node 18+ fetch body 是 ReadableStream，要轉成 Node Readable
   const nodeStream = Readable.fromWeb(response.body);
 
-  let lastPercent = -1;
   const writer = pipeline(nodeStream, async (chunk) => {
+    if (cancelled) {
+      throw new Error('cancelled');
+    }
     downloaded += chunk.length;
     fileStream.write(chunk);
 
-    // 每 0.2 秒更新一次進度（避免太頻繁的 stdout write）
     const now = Date.now();
-    if (now - lastReportTime > 200 || downloaded === total) {
-      const elapsed = (now - startTime) / 1000;
-      const speed = (downloaded - lastDownloaded) / ((now - lastReportTime) / 1000);
+    const dt = (now - lastReportTime) / 1000;
+    if (dt > 0.2 || downloaded === total) {
+      const speed = dt > 0 ? (downloaded - lastDownloaded) / dt : 0;
       lastDownloaded = downloaded;
       lastReportTime = now;
-      const pct = total > 0 ? (downloaded / total * 100).toFixed(1) : '?';
+      const elapsed = (now - startTime) / 1000;
       const remaining = speed > 0 ? (total - downloaded) / speed : 0;
-      const line =
-        `\r  ${formatBytes(downloaded)} / ${total > 0 ? formatBytes(total) : '?'} ` +
-        `(${pct}%) ${humanSpeed(speed)} ` +
-        `${total > 0 ? `剩 ${timeRemaining(remaining)}` : ''}   `;
-      process.stdout.write(line);
+      const pct = total > 0 ? (downloaded / total) * 100 : 0;
+
+      if (JSON_MODE) {
+        emit({
+          event: 'progress',
+          phase: 'downloading',
+          downloaded,
+          total,
+          percent: Math.round(pct * 10) / 10,
+          speedBps: Math.round(speed),
+          remainingSec: Math.round(remaining),
+          elapsedMs: Math.round(elapsed * 1000),
+        });
+      } else {
+        const line =
+          `\r  ${formatBytes(downloaded)} / ${total > 0 ? formatBytes(total) : '?'} ` +
+          `(${(pct).toFixed(1)}%) ${humanSpeed(speed)} ` +
+          `${total > 0 ? `剩 ${timeRemaining(remaining)}` : ''}   `;
+        process.stdout.write(line);
+      }
     }
   });
 
@@ -175,9 +238,11 @@ async function downloadFile(url, destPath) {
     fileStream.end((err) => (err ? reject(err) : resolve()));
   });
 
-  process.stdout.write('\n');
-  const totalSec = (Date.now() - startTime) / 1000;
-  console.log(`✓ 下載完成：${formatBytes(downloaded)} in ${timeRemaining(totalSec)}`);
+  if (!JSON_MODE) {
+    process.stdout.write('\n');
+    const totalSec = (Date.now() - startTime) / 1000;
+    console.log(`✓ 下載完成：${formatBytes(downloaded)} in ${timeRemaining(totalSec)}`);
+  }
   return downloaded;
 }
 
@@ -185,12 +250,13 @@ async function downloadFile(url, destPath) {
  * 解壓 tar.bz2 到指定目錄（用 Windows 10+ 內建 tar.exe）
  */
 async function extractTarBz2(archivePath, destDir) {
-  console.log(`解壓中: ${archivePath} → ${destDir}`);
+  if (JSON_MODE) {
+    emit({ event: 'phase', phase: 'extracting', message: `解壓中: ${archivePath} → ${destDir}` });
+  } else {
+    console.log(`解壓中: ${archivePath} → ${destDir}`);
+  }
 
   return new Promise((resolve, reject) => {
-    // Windows 10+ 內建 tar.exe 支援 .tar.bz2
-    // -xjf：解壓 bzip2 + tar
-    // -C：指定目標目錄
     const tar = spawn('tar', ['-xjf', archivePath, '-C', destDir], {
       stdio: ['ignore', 'inherit', 'inherit'],
     });
@@ -216,8 +282,12 @@ function cleanupDir(dir, patterns) {
     if (existsSync(target)) {
       const stat = statSync(target);
       if (stat.isDirectory()) {
+        if (!JSON_MODE) {
+          console.log(`✓ 清理：${target}`);
+        } else {
+          emit({ event: 'phase', phase: 'cleanup', message: `清理：${target}` });
+        }
         rmSync(target, { recursive: true, force: true });
-        console.log(`✓ 清理：${target}`);
       }
     }
   }
@@ -225,31 +295,49 @@ function cleanupDir(dir, patterns) {
 
 // ===== Main =====
 async function main() {
-  const args = process.argv.slice(2);
+  const args = process.argv.slice(2).filter((a) => a !== '--json');
 
+  // --list
   if (args.includes('--list') || args.includes('-l')) {
-    console.log('可用的 ASR 模型：\n');
-    for (const [key, m] of Object.entries(MODELS)) {
-      console.log(`  ${key}`);
-      console.log(`    描述：${m.description}`);
-      console.log(`    URL：${m.url}`);
-      console.log(`    下載目標：${getModelDir(m.preset)}\n`);
+    if (JSON_MODE) {
+      const list = Object.entries(MODELS).map(([key, m]) => ({
+        key,
+        name: m.name,
+        description: m.description,
+        preset: m.preset,
+        sizeBytes: m.sizeBytes,
+        targetPath: getModelDir(m.preset),
+      }));
+      process.stdout.write(JSON.stringify({ event: 'list', models: list }) + '\n');
+    } else {
+      console.log('可用的 ASR 模型：\n');
+      for (const [key, m] of Object.entries(MODELS)) {
+        console.log(`  ${key}`);
+        console.log(`    描述：${m.description}`);
+        console.log(`    URL：${m.url}`);
+        console.log(`    下載目標：${getModelDir(m.preset)}\n`);
+      }
     }
     return;
   }
 
+  // --help
   if (args.includes('--help') || args.includes('-h')) {
     console.log(`用法：
   node scripts/download-model.mjs                     → 互動選單
   node scripts/download-model.mjs sherpa-zh-en        → 直接下載
-  node scripts/download-model.mjs whisper-small       → 直接下載
   node scripts/download-model.mjs --list              → 列出可用模型
+  node scripts/download-model.mjs --json sherpa-zh-en → JSON 事件流（main 進程用）
 `);
     return;
   }
 
   let modelKey = args[0];
   if (!modelKey) {
+    if (JSON_MODE) {
+      emitError('缺少模型 key', 'invalid_args');
+      process.exit(4);
+    }
     try {
       modelKey = await pickModel();
     } catch (err) {
@@ -264,27 +352,39 @@ async function main() {
 
   const model = MODELS[modelKey];
   if (!model) {
-    console.error(`錯誤：未知模型 "${modelKey}"`);
-    console.error(`可用：${Object.keys(MODELS).join(', ')}`);
-    process.exit(4);
+    if (JSON_MODE) {
+      emitError(`未知模型 "${modelKey}"，可用：${Object.keys(MODELS).join(', ')}`, 'invalid_args');
+      process.exit(4);
+    } else {
+      console.error(`錯誤：未知模型 "${modelKey}"`);
+      console.error(`可用：${Object.keys(MODELS).join(', ')}`);
+      process.exit(4);
+    }
   }
 
-  console.log(`\n📦 ${model.name}`);
-  console.log(`   ${model.description}`);
-  console.log(`   URL: ${model.url}\n`);
+  if (!JSON_MODE) {
+    console.log(`\n📦 ${model.name}`);
+    console.log(`   ${model.description}`);
+    console.log(`   URL: ${model.url}\n`);
+  }
 
   const targetDir = getModelDir(model.preset);
 
   // 檢查是否已存在
   if (existsSync(targetDir)) {
-    console.log(`⚠️  目標目錄已存在：${targetDir}`);
-    const ok = await confirm('要覆蓋嗎？');
-    if (!ok) {
-      console.log('已取消');
-      process.exit(3);
+    if (JSON_MODE) {
+      emit({ event: 'exists', path: targetDir });
+      process.exit(5);
+    } else {
+      console.log(`⚠️  目標目錄已存在：${targetDir}`);
+      const ok = await confirm('要覆蓋嗎？');
+      if (!ok) {
+        console.log('已取消');
+        process.exit(3);
+      }
+      console.log('移除舊目錄...');
+      rmSync(targetDir, { recursive: true, force: true });
     }
-    console.log('移除舊目錄...');
-    rmSync(targetDir, { recursive: true, force: true });
   }
 
   // 確保 models 根目錄存在
@@ -297,10 +397,20 @@ async function main() {
   const archiveName = model.url.split('/').pop() ?? 'model';
   const tmpArchive = join(tmpDir, `${Date.now()}-${archiveName}`);
 
+  const downloadStart = Date.now();
   try {
     await downloadFile(model.url, tmpArchive);
   } catch (err) {
-    console.error(`\n✗ 下載失敗：${err.message}`);
+    if (cancelled) {
+      // 已被 SIGTERM 觸發，不用再 emit error
+      if (existsSync(tmpArchive)) rmSync(tmpArchive, { force: true });
+      process.exit(130);
+    }
+    if (JSON_MODE) {
+      emitError(`下載失敗：${err.message}`, 'download_failed');
+    } else {
+      console.error(`\n✗ 下載失敗：${err.message}`);
+    }
     if (existsSync(tmpArchive)) {
       rmSync(tmpArchive, { force: true });
     }
@@ -310,24 +420,18 @@ async function main() {
   // 解壓或搬移
   try {
     if (model.archive === 'tar.bz2') {
-      // 為 tar 解壓先建好目錄
       mkdirSync(targetDir, { recursive: true });
       await extractTarBz2(tmpArchive, targetDir);
 
-      // tar 解壓會把 extractedDir 的內容直接放進 targetDir
-      // 檢查是否需要把 extractedDir 改名（讓目錄結構 = model.preset）
+      // 重新命名子目錄
       if (model.extractedDir) {
         const inner = join(targetDir, model.extractedDir);
         if (existsSync(inner) && inner !== targetDir) {
-          // 把 targetDir/* 搬進 inner 結構不對，直接 rename inner 為 targetDir
-          // 實際上 targetDir = inner 內容直接解出，所以 inner 應該等於 targetDir
-          // 但實際流程是：先 mkdir targetDir，再 -xjf 到 targetDir
-          // tar 會解出 extractedDir/ 整個目錄，所以變成 targetDir/extractedDir/
-          // 我們要 rename extractedDir → targetDir
-          // 簡化：rm targetDir，把 inner 改名為 targetDir
           rmSync(targetDir, { recursive: true, force: true });
           renameSync(inner, targetDir);
-          console.log(`✓ 重新命名：${inner} → ${targetDir}`);
+          if (!JSON_MODE) {
+            console.log(`✓ 重新命名：${inner} → ${targetDir}`);
+          }
         }
       }
 
@@ -336,18 +440,32 @@ async function main() {
         cleanupDir(targetDir, model.cleanup);
       }
     } else if (model.archive === 'bin') {
-      // 直接存 .bin 檔
       mkdirSync(targetDir, { recursive: true });
       const targetFile = join(targetDir, 'ggml-small.bin');
       renameSync(tmpArchive, targetFile);
-      console.log(`✓ 移動到：${targetFile}`);
+      if (!JSON_MODE) {
+        console.log(`✓ 移動到：${targetFile}`);
+      }
     }
 
-    console.log(`\n✅ 模型下載完成！`);
-    console.log(`   路徑：${targetDir}`);
-    console.log(`\n請重啟 Speak2T app 載入模型。`);
+    const durationMs = Date.now() - downloadStart;
+    if (JSON_MODE) {
+      emit({ event: 'done', path: targetDir, durationMs });
+    } else {
+      console.log(`\n✅ 模型下載完成！`);
+      console.log(`   路徑：${targetDir}`);
+      console.log(`\n請重啟 Speak2T app 載入模型。`);
+    }
   } catch (err) {
-    console.error(`\n✗ 解壓失敗：${err.message}`);
+    if (cancelled) {
+      if (existsSync(tmpArchive)) rmSync(tmpArchive, { force: true });
+      process.exit(130);
+    }
+    if (JSON_MODE) {
+      emitError(`解壓失敗：${err.message}`, 'extract_failed');
+    } else {
+      console.error(`\n✗ 解壓失敗：${err.message}`);
+    }
     if (existsSync(tmpArchive)) {
       rmSync(tmpArchive, { force: true });
     }
@@ -356,6 +474,13 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('未預期錯誤：', err);
+  if (cancelled) {
+    process.exit(130);
+  }
+  if (JSON_MODE) {
+    emitError(`未預期錯誤：${err.message}`, 'unexpected');
+  } else {
+    console.error('未預期錯誤：', err);
+  }
   process.exit(1);
 });

@@ -25,9 +25,11 @@ import { hotkeyManager } from '../functions/hotkey/manager';
 import { audioIngest } from '../functions/audio/ingest';
 import { AsrManager } from '../functions/asr/manager';
 import { clipboardInjector } from '../functions/injector/clipboard';
+import { modelDownloader } from '../functions/model/downloader';
 import { lifecycle } from './lifecycle';
 import { DEFAULT_HOTKEY } from '../shared/constants';
 import type { AppSettings } from '../shared/types';
+import type { DownloadProgressPayload, DownloadCompletePayload, DownloadErrorPayload, DownloadExistsPayload, DownloadCancelledPayload } from '../shared/api';
 
 // 單一實例鎖
 const gotTheLock = app.requestSingleInstanceLock();
@@ -68,7 +70,10 @@ if (!gotTheLock) {
     // 6. IPC handlers
     registerIpcHandlers();
 
-    // 7. macOS 特殊處理（雖然 P0 是 Windows 優先）
+    // 7. Model downloader 事件 wiring
+    wireModelDownloader();
+
+    // 8. macOS 特殊處理（雖然 P0 是 Windows 優先）
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         createMainWindow();
@@ -91,6 +96,9 @@ if (!gotTheLock) {
     hotkeyManager.unregister();
     audioIngest.stop();
     asrManager?.dispose();
+    if (modelDownloader.isDownloading()) {
+      modelDownloader.cancelDownload();
+    }
     destroyTray();
   });
 }
@@ -254,6 +262,85 @@ function registerIpcHandlers(): void {
   // 停止錄音（renderer 觸發）
   ipcMain.on(IPC.STOP_RECORD, () => {
     void doStopRecord();
+  });
+
+  // ===== P2：模型下載 IPC =====
+
+  // 列出所有模型
+  ipcMain.handle(IPC.LIST_MODELS, () => {
+    return modelDownloader.listModels();
+  });
+
+  // 啟動下載
+  ipcMain.handle(IPC.DOWNLOAD_MODEL, (_event, presetKey: string) => {
+    modelDownloader.startDownload(presetKey);
+  });
+
+  // 取消下載
+  ipcMain.handle(IPC.CANCEL_DOWNLOAD, () => {
+    modelDownloader.cancelDownload();
+  });
+}
+
+/**
+ * Wire ModelDownloader events → broadcast to all renderer
+ * 同步：下載完成時自動 reload ASR manager（用新下載的模型）
+ */
+function wireModelDownloader(): void {
+  modelDownloader.on('progress', (e) => {
+    const payload: DownloadProgressPayload = { ...e, timestamp: Date.now() };
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send(IPC.DOWNLOAD_PROGRESS, payload);
+      }
+    }
+  });
+
+  modelDownloader.on('complete', async (e) => {
+    console.log(`[main] model download complete: ${e.preset} → ${e.path} (${e.durationMs}ms)`);
+    const payload: DownloadCompletePayload = { ...e, timestamp: Date.now() };
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send(IPC.DOWNLOAD_COMPLETE, payload);
+      }
+    }
+    // 自動 reload ASR（讓新下載的模型立即可用）
+    if (asrManager) {
+      try {
+        await asrManager.switchEngine(appState.getSettings());
+        console.log('[main] ASR manager reloaded with new model');
+      } catch (err) {
+        console.warn(`[main] ASR reload after download failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  });
+
+  modelDownloader.on('error', (e) => {
+    console.error(`[main] model download error: ${e.code} - ${e.message}`);
+    const payload: DownloadErrorPayload = { ...e, timestamp: Date.now() };
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send(IPC.DOWNLOAD_ERROR, payload);
+      }
+    }
+  });
+
+  modelDownloader.on('exists', (e) => {
+    const payload: DownloadExistsPayload = { ...e, timestamp: Date.now() };
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send(IPC.DOWNLOAD_EXISTS, payload);
+      }
+    }
+  });
+
+  modelDownloader.on('cancelled', (e) => {
+    const payload: DownloadCancelledPayload = { ...e, timestamp: Date.now() };
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send(IPC.DOWNLOAD_CANCELLED, payload);
+      }
+    }
   });
 }
 
