@@ -15,6 +15,10 @@
     "build:preload": "tsc -p tsconfig.preload.json",
     "build:win": "npm run build && electron-builder --win --x64",
     "build:win:dir": "npm run build && electron-builder --win --x64 --dir",
+    "build:mac": "npm run build && electron-builder --mac",
+    "build:mac:x64": "npm run build && electron-builder --mac --x64",
+    "build:mac:arm64": "npm run build && electron-builder --mac --arm64",
+    "build:mac:universal": "npm run build && electron-builder --mac --universal",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.preload.json --noEmit",
     "lint": "eslint . --ext .ts,.tsx",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
@@ -97,7 +101,10 @@
       "target": "dmg",
       "icon": "assets/icon-square.png",
       "category": "public.app-category.productivity",
-      "artifactName": "Speak2T-${version}-${arch}.${ext}"
+      "artifactName": "Speak2T-${version}-${arch}.${ext>",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Speak2T 需要麥克風權限來接收您的語音並轉成文字"
+      }
     },
     "publish": {
       "provider": "github",
