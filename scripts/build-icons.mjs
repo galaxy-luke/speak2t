@@ -2,14 +2,22 @@
 /**
  * scripts/build-icons.mjs
  *
- * 從 assets/icon.png（512x512 任意格式：PNG/JPEG）產出 electron-builder 需要的 icon.ico
+ * 從 assets/logo.png（512x512 應用程式 logo 樣式 source of truth）產出各種 icon 格式
  * 自動偵測格式並轉成 PNG → 產 ICO（多尺寸：16, 32, 48, 64, 128, 256）
  *
+ * logo.png 是應用程式的 logo 樣式 source of truth：
+ * - 安裝時 PNG（icon-square.png）
+ * - Windows multi-size ICO（icon.ico）
+ * - 系統匣 icon（tray-icon.png）
+ * - app icon（icon.png = logo.png 的標準化）
+ * 全部從 logo.png 裁切 / 縮放衍生出來。
+ *
  * 用法：node scripts/build-icons.mjs
- * 輸入：assets/icon.png（512x512 透明背景 microphone icon）
+ * 輸入：assets/logo.png（512x512 透明背景 應用程式 logo）
  * 輸出：
- *   - assets/icon.ico       （Windows installer / 應用程式 icon）
+ *   - assets/icon.png       （512x512 標準化 PNG，給 main 引用 / 當 app icon source）
  *   - assets/icon-square.png（512x512 PNG，給 Mac 通用）
+ *   - assets/icon.ico       （Windows installer / 應用程式 icon）
  *   - assets/tray-icon.png  （256x256 PNG，給 main/tray.ts 用）
  */
 
@@ -21,14 +29,14 @@ import pngToIco from 'png-to-ico';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
-const ICON_SRC = join(ROOT, 'assets', 'icon.png');
+const ICON_SRC = join(ROOT, 'assets', 'logo.png');
 const ICON_PNG_OUT = join(ROOT, 'assets', 'icon-square.png');
 const ICON_OUT = join(ROOT, 'assets', 'icon.ico');
 const TRAY_OUT = join(ROOT, 'assets', 'tray-icon.png');
 
 if (!existsSync(ICON_SRC)) {
-  console.error(`✗ 找不到 source icon: ${ICON_SRC}`);
-  console.error('  請先建立 512x512 麥克風 icon (PNG/JPEG)');
+  console.error(`✗ 找不到 source logo: ${ICON_SRC}`);
+  console.error('  請先建立 512x512 應用程式 logo (PNG/JPEG)');
   process.exit(1);
 }
 
