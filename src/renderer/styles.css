@@ -17,8 +17,12 @@ body,
   overflow: hidden; /* 鎖住最外層，避免跟內部 scroll bar 雙層 */
 }
 
+html {
+  font-size: 16px; /* rem 基準：所有 font-size 用 rem，未來要再放大縮小整體，改這行就好 */
+}
+
 body {
-  font-size: 14px;
+  font-size: 1rem;
   line-height: 1.6;
 }
 
@@ -54,14 +58,14 @@ body {
 }
 
 h1 {
-  font-size: 28px;
+  font-size: 2rem;
   font-weight: 600;
   margin-bottom: 4px;
 }
 
 .subtitle {
   color: #888;
-  font-size: 13px;
+  font-size: 0.9286rem;
   margin-bottom: 24px;
 }
 
@@ -74,7 +78,7 @@ h1 {
 }
 
 .card h2 {
-  font-size: 16px;
+  font-size: 1.1429rem;
   font-weight: 600;
   margin-bottom: 12px;
   color: #4a9eff;
@@ -89,7 +93,7 @@ h1 {
   display: grid;
   grid-template-columns: 140px 1fr;
   gap: 8px 16px;
-  font-size: 13px;
+  font-size: 0.9286rem;
 }
 
 .card dt {
@@ -100,13 +104,13 @@ h1 {
   background: #1a1a1a;
   padding: 2px 8px;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: 0.8571rem;
   color: #ffd966;
 }
 
 code {
   font-family: 'Cascadia Code', 'Consolas', monospace;
-  font-size: 12px;
+  font-size: 0.8571rem;
 }
 
 .status-row {
@@ -160,18 +164,18 @@ kbd {
   border-radius: 4px;
   padding: 6px 12px;
   font-family: 'Cascadia Code', monospace;
-  font-size: 13px;
+  font-size: 0.9286rem;
   color: #ffd966;
 }
 
 .count {
   color: #888;
-  font-size: 13px;
+  font-size: 0.9286rem;
 }
 
 .hint {
   color: #888;
-  font-size: 12px;
+  font-size: 0.8571rem;
   margin-top: 8px;
 }
 
@@ -185,7 +189,7 @@ kbd {
   padding: 12px 24px;
   border-radius: 24px;
   font-weight: 500;
-  font-size: 14px;
+  font-size: 1rem;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   animation: slide-up 0.2s ease-out;
 }
@@ -227,7 +231,7 @@ kbd {
   border: 1px solid #444;
   border-radius: 6px;
   font-family: 'Cascadia Code', 'Consolas', monospace;
-  font-size: 13px;
+  font-size: 0.9286rem;
   cursor: pointer;
 }
 
@@ -245,7 +249,7 @@ kbd {
   padding: 8px 16px;
   border: none;
   border-radius: 6px;
-  font-size: 14px;
+  font-size: 1rem;
   font-weight: 500;
   cursor: pointer;
   transition: background 0.15s;
@@ -288,7 +292,7 @@ kbd {
 
 .error {
   color: #ff5252;
-  font-size: 13px;
+  font-size: 0.9286rem;
   margin-top: 8px;
 }
 
@@ -299,7 +303,7 @@ kbd {
   margin: 8px 0;
   padding: 10px 12px;
   border-radius: 6px;
-  font-size: 14px;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
@@ -317,7 +321,7 @@ kbd {
 .asr-partial .label,
 .asr-final .label {
   display: inline-block;
-  font-size: 11px;
+  font-size: 0.7857rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-right: 8px;
@@ -341,7 +345,7 @@ kbd {
   padding: 8px 12px;
   background: #1a1a1a;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 0.8571rem;
   color: #888;
 }
 
@@ -389,7 +393,7 @@ kbd {
   min-width: 240px;
   max-width: 320px;
   color: #fff;
-  font-size: 13px;
+  font-size: 0.9286rem;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
@@ -461,7 +465,7 @@ kbd {
   padding-top: 6px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   color: #ccc;
-  font-size: 12px;
+  font-size: 0.8571rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -494,7 +498,7 @@ kbd {
 }
 
 .navbar-brand {
-  font-size: 16px;
+  font-size: 1.1429rem;
   font-weight: 600;
   padding: 0 20px 20px 20px;
   color: #4a9eff;
@@ -516,7 +520,7 @@ kbd {
   border: none;
   color: #aaa;
   padding: 10px 20px;
-  font-size: 14px;
+  font-size: 1rem;
   font-family: inherit;
   cursor: pointer;
   border-left: 3px solid transparent;
@@ -538,7 +542,7 @@ kbd {
 .navbar-footer {
   padding: 12px 20px 0 20px;
   border-top: 1px solid #2a2a2a;
-  font-size: 11px;
+  font-size: 0.7857rem;
   color: #666;
 }
 
@@ -573,7 +577,7 @@ kbd {
 
 .dirty-indicator {
   color: #ffd966;
-  font-size: 12px;
+  font-size: 0.8571rem;
   font-weight: 500;
 }
 
@@ -622,7 +626,7 @@ kbd {
 }
 
 .tab-title {
-  font-size: 22px;
+  font-size: 1.5714rem;
   font-weight: 600;
   color: #fff;
   margin-bottom: 20px;
@@ -640,7 +644,7 @@ kbd {
 
 .form-label {
   color: #aaa;
-  font-size: 13px;
+  font-size: 0.9286rem;
   font-weight: 500;
   padding-top: 8px;
 }
@@ -659,7 +663,7 @@ kbd {
   border-radius: 6px;
   padding: 8px 12px;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 0.9286rem;
   cursor: pointer;
   transition: border-color 0.1s;
 }
@@ -735,7 +739,7 @@ kbd {
 }
 
 .toggle-label {
-  font-size: 13px;
+  font-size: 0.9286rem;
   color: #ccc;
 }
 
@@ -748,7 +752,7 @@ kbd {
 }
 
 .info-box h3 {
-  font-size: 14px;
+  font-size: 1rem;
   font-weight: 600;
   color: #4a9eff;
   margin-bottom: 10px;
@@ -766,7 +770,7 @@ kbd {
   display: grid;
   grid-template-columns: 100px 1fr;
   gap: 6px 12px;
-  font-size: 13px;
+  font-size: 0.9286rem;
 }
 
 .info-dl dt {
@@ -779,14 +783,14 @@ kbd {
 
 .info-list {
   margin-left: 20px;
-  font-size: 13px;
+  font-size: 0.9286rem;
   color: #ccc;
   line-height: 1.7;
 }
 
 .code-mono {
   font-family: 'Cascadia Code', 'Consolas', monospace;
-  font-size: 11px;
+  font-size: 0.7857rem;
   color: #888;
   word-break: break-all;
 }
@@ -804,7 +808,7 @@ kbd {
 
 .confirm-text {
   color: #ffaaaa;
-  font-size: 13px;
+  font-size: 0.9286rem;
   flex: 1;
 }
 
@@ -815,7 +819,7 @@ kbd {
 }
 
 .tester-section h3 {
-  font-size: 14px;
+  font-size: 1rem;
   font-weight: 600;
   color: #4a9eff;
   margin-bottom: 8px;
@@ -827,7 +831,7 @@ kbd {
   justify-content: center;
   height: 100vh;
   color: #888;
-  font-size: 14px;
+  font-size: 1rem;
 }
 
 /* ===== P2 Stage 2: 模型下載 UI ===== */
@@ -839,7 +843,7 @@ kbd {
 }
 
 .download-section h3 {
-  font-size: 14px;
+  font-size: 1rem;
   font-weight: 600;
   color: #4a9eff;
   margin-bottom: 8px;
@@ -882,21 +886,21 @@ kbd {
 }
 
 .model-name {
-  font-size: 14px;
+  font-size: 1rem;
   font-weight: 600;
   color: #fff;
   margin-bottom: 4px;
 }
 
 .model-desc {
-  font-size: 12px;
+  font-size: 0.8571rem;
   color: #888;
   margin-bottom: 6px;
   line-height: 1.5;
 }
 
 .model-meta {
-  font-size: 11px;
+  font-size: 0.7857rem;
 }
 
 .model-action {
@@ -907,7 +911,7 @@ kbd {
   margin-top: 8px;
   padding: 8px 12px;
   border-radius: 4px;
-  font-size: 13px;
+  font-size: 0.9286rem;
 }
 
 .model-msg.success {
@@ -927,19 +931,19 @@ kbd {
 
 .model-sha256.verified {
   color: #88dd88;
-  font-size: 11px;
+  font-size: 0.7857rem;
   font-weight: normal;
 }
 
 .model-sha256.unverified {
   color: #ddaa66;
-  font-size: 11px;
+  font-size: 0.7857rem;
   font-weight: normal;
 }
 
 .model-sha256.mismatch {
   color: #ff8888;
-  font-size: 11px;
+  font-size: 0.7857rem;
   font-weight: 600;
   text-shadow: 0 0 4px rgba(255, 80, 80, 0.3);
 }
@@ -954,7 +958,7 @@ kbd {
 
 .btn-tiny {
   padding: 4px 10px;
-  font-size: 12px;
+  font-size: 0.8571rem;
   background: #2a3a4a;
   color: #88bbff;
   border: 1px solid #3a4a5a;
@@ -1020,7 +1024,7 @@ kbd {
   justify-content: space-between;
   align-items: center;
   margin-top: 6px;
-  font-size: 11px;
+  font-size: 0.7857rem;
   color: #aaa;
   font-family: 'Cascadia Code', 'Consolas', monospace;
   gap: 8px;
@@ -1032,7 +1036,7 @@ kbd {
 
 .progress-message {
   margin-top: 6px;
-  font-size: 12px;
+  font-size: 0.8571rem;
   color: #aaa;
   text-align: center;
 }
@@ -1051,13 +1055,13 @@ kbd {
 }
 
 .update-label {
-  font-size: 12px;
+  font-size: 0.8571rem;
   color: #888;
 }
 
 .update-version {
   font-family: 'Cascadia Code', monospace;
-  font-size: 14px;
+  font-size: 1rem;
   color: #4a9eff;
   background: #1a1a1a;
   padding: 4px 8px;
@@ -1068,7 +1072,7 @@ kbd {
   margin-top: 8px;
   padding: 10px 12px;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 0.9286rem;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1111,7 +1115,7 @@ kbd {
   background: #1a1a1a;
   border: 1px solid #2a4a6a;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 0.9286rem;
 }
 
 .postprocess-original,
@@ -1125,21 +1129,21 @@ kbd {
 .postprocess-processed code {
   flex: 1;
   color: #ffd966;
-  font-size: 12px;
+  font-size: 0.8571rem;
   word-break: break-word;
 }
 
 .postprocess-arrow {
   text-align: center;
   color: #4a9eff;
-  font-size: 11px;
+  font-size: 0.7857rem;
   margin: 6px 0;
   font-family: 'Cascadia Code', monospace;
 }
 
 .postprocess-rules {
   margin-top: 8px;
-  font-size: 11px;
+  font-size: 0.7857rem;
   color: #888;
   display: flex;
   flex-wrap: wrap;
@@ -1153,7 +1157,7 @@ kbd {
   background: #2a3a4a;
   color: #88bbff;
   border-radius: 3px;
-  font-size: 10px;
+  font-size: 0.7143rem;
   font-family: 'Cascadia Code', monospace;
 }
 
@@ -1181,7 +1185,7 @@ kbd {
 }
 
 .preview-label {
-  font-size: 12px;
+  font-size: 0.8571rem;
   color: #888;
   margin-bottom: 6px;
   font-weight: 500;
@@ -1201,7 +1205,7 @@ kbd {
   background: #2a2a2a;
   color: #888;
   border-radius: 3px;
-  font-size: 10px;
+  font-size: 0.7143rem;
   min-width: 40px;
   text-align: center;
 }
@@ -1212,7 +1216,7 @@ kbd {
 }
 
 .preview-text {
-  font-size: 12px;
+  font-size: 0.8571rem;
   color: #e0e0e0;
   font-family: 'Cascadia Code', 'Consolas', monospace;
   word-break: break-word;
@@ -1220,7 +1224,7 @@ kbd {
 
 .preview-rules {
   margin-top: 6px;
-  font-size: 10px;
+  font-size: 0.7143rem;
   color: #888;
   display: flex;
   flex-wrap: wrap;
