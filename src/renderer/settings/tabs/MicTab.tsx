@@ -10,6 +10,7 @@
 
 import type { AppSettings } from '../../../shared/types';
 import { useAudioDevices } from '../hooks/useAudioDevices';
+import { AsrTester } from './AsrTester';
 
 interface Props {
   draft: AppSettings;
@@ -72,10 +73,12 @@ export function MicTab({ draft, onChange }: Props) {
         <h3>說明</h3>
         <ul className="info-list">
           <li>瀏覽器基於安全考量，必須先獲得麥克風權限才會顯示完整裝置名稱。</li>
-          <li>若 label 顯示為空（deviceId 開頭），請到「ASR」tab 按「開始測試」取得權限後再回來看。</li>
+          <li>若 label 顯示為空（deviceId 開頭），請直接在下面按「🎙️ 開始」測試取得權限。</li>
           <li>切換裝置後，下次按熱鍵或測試按鈕時生效。</li>
         </ul>
       </section>
+
+      <AsrTester settings={draft} />
     </div>
   );
 }
