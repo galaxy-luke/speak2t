@@ -839,6 +839,7 @@ kbd {
 .download-section {
   margin-top: 32px;
   padding-top: 24px;
+  padding-bottom: 24px; /* 跟下面「自訂模型路徑」section 拉開距離，避免黏在一起 */
   border-top: 1px solid #2a2a2a;
 }
 
