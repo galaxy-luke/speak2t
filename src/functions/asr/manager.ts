@@ -80,6 +80,8 @@ export class AsrManager extends EventEmitter {
       for (const win of BrowserWindow.getAllWindows()) {
         if (!win.isDestroyed()) {
           win.webContents.send(IPC.ASR_PARTIAL, payload);
+          // 同步廣播 indicator 文字（給 frameless 浮窗用）
+          win.webContents.send(IPC.INDICATOR_TEXT, { text, timestamp: Date.now() });
         }
       }
 

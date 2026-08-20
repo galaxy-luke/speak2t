@@ -1,20 +1,25 @@
 /**
  * Electron Main 入口
  *
- * P0 階段：極簡版，只做 wiring
- * P1 階段：加入 audio ingest 接收（ASR 留 P1 stage 2）
- *
  * 職責：
- * - 建立 settings 視窗
+ * - 建立 settings 視窗 + 指示器視窗（stage 4）
  * - 建立系統匣
  * - 註冊全域熱鍵
- * - 處理 IPC（GET_SETTINGS / SAVE_SETTINGS / SHOW_SETTINGS / AUDIO_CHUNK）
+ * - 處理 IPC（GET_SETTINGS / SAVE_SETTINGS / SHOW_SETTINGS / AUDIO_CHUNK / START_RECORD / STOP_RECORD）
+ * - ASR 串流生命週期
+ * - 文字注入
  */
 
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { IPC } from '../shared/ipc-channels';
 import { appState } from './app-state';
-import { createMainWindow, showMainWindow } from './windows';
+import {
+  createMainWindow,
+  showMainWindow,
+  createIndicatorWindow,
+  showIndicator,
+  hideIndicator,
+} from './windows';
 import { createTray, destroyTray } from './tray';
 import { hotkeyManager } from '../functions/hotkey/manager';
 import { audioIngest } from '../functions/audio/ingest';
@@ -36,6 +41,7 @@ if (!gotTheLock) {
   app.whenReady().then(async () => {
     // 1. 建立視窗與系統匣
     createMainWindow();
+    createIndicatorWindow();
     createTray();
 
     // 2. 註冊熱鍵
@@ -44,16 +50,25 @@ if (!gotTheLock) {
       console.warn(`[main] hotkey ${DEFAULT_HOTKEY} register failed`);
     }
 
-    // 3. 音訊 ingest wiring
+    // 3. 連接 hotkey toggle 事件 → record/stop 邏輯
+    hotkeyManager.on('toggle', ({ isRecording }) => {
+      if (isRecording) {
+        doStartRecord();
+      } else {
+        void doStopRecord();
+      }
+    });
+
+    // 4. 音訊 ingest wiring
     wireAudioIngest();
 
-    // 4. ASR manager 初始化（async，模型未下載時會失敗但不阻擋 app）
+    // 5. ASR manager 初始化（async，模型未下載時會失敗但不阻擋 app）
     await initAsrManager();
 
-    // 5. IPC handlers
+    // 6. IPC handlers
     registerIpcHandlers();
 
-    // 6. macOS 特殊處理（雖然 P0 是 Windows 優先）
+    // 7. macOS 特殊處理（雖然 P0 是 Windows 優先）
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         createMainWindow();
@@ -86,11 +101,9 @@ let asrManager: AsrManager | null = null;
 /**
  * 連接 audio.ingest 的 level event 到 indicator renderer（broadcast）
  * 連接 audio.ingest chunk event 到 asrManager.feed()
- * 階段 4 會接真正的 indicator window；現在先 broadcast 給所有 renderer
  */
 function wireAudioIngest(): void {
   audioIngest.on('level', (level) => {
-    // 廣播到所有 renderer（目前只有 settings window，stage 4 加 indicator window）
     for (const win of BrowserWindow.getAllWindows()) {
       if (!win.isDestroyed()) {
         win.webContents.send(IPC.INDICATOR_LEVEL, { level, timestamp: Date.now() });
@@ -99,7 +112,6 @@ function wireAudioIngest(): void {
   });
 
   audioIngest.on('chunk', (samples, sampleRate) => {
-    // 接到 ASR engine
     if (asrManager?.initialized) {
       asrManager.feed(samples, sampleRate);
     }
@@ -121,10 +133,63 @@ async function initAsrManager(): Promise<void> {
     await asrManager.init();
     console.log(`[main] asr manager ready: engine=${settings.asrEngine}`);
   } catch (err) {
-    // 初始化失敗（最常見：模型檔不存在）
     console.warn(`[main] asr manager init failed: ${err instanceof Error ? err.message : String(err)}`);
     console.warn('[main] ASR 功能暫時停用，請用 npm run download-model 下載模型後重啟 app');
   }
+}
+
+/**
+ * 開始錄音（給 hotkey toggle 跟 renderer START_RECORD 共用）
+ */
+function doStartRecord(): void {
+  console.log('[main] doStartRecord');
+  if (!audioIngest.recording) {
+    audioIngest.start();
+  }
+  if (asrManager?.initialized) {
+    try {
+      asrManager.start();
+      appState.setStatus('recording');
+    } catch (err) {
+      console.error('[main] asr start failed:', err);
+    }
+  } else {
+    console.warn('[main] asr manager not initialized, 純錄音模式');
+  }
+}
+
+/**
+ * 停止錄音（給 hotkey toggle 跟 renderer STOP_RECORD 共用）
+ */
+async function doStopRecord(): Promise<void> {
+  console.log('[main] doStopRecord');
+  if (asrManager?.initialized) {
+    appState.setStatus('processing');
+    try {
+      const result = await asrManager.stop();
+      console.log(`[main] ASR result: "${result.text}" (${result.durationMs}ms)`);
+
+      // 文字注入（D-C 兩種模式：clipboard / clipboard-and-paste）
+      if (result.text) {
+        const settings = appState.getSettings();
+        const injectResult = await clipboardInjector.inject(
+          result.text,
+          settings.injectionMode,
+        );
+        if (injectResult.ok) {
+          console.log(`[main] injected ${injectResult.text.length} chars via ${settings.injectionMode}`);
+        } else {
+          console.warn(`[main] injection failed: ${injectResult.reason ?? 'unknown'}`);
+        }
+      }
+    } catch (err) {
+      console.error('[main] asr stop failed:', err);
+    }
+  }
+  if (audioIngest.recording) {
+    audioIngest.stop();
+  }
+  appState.setStatus('idle');
 }
 
 function registerIpcHandlers(): void {
@@ -155,62 +220,32 @@ function registerIpcHandlers(): void {
     audioIngest.feed(payload.samples, payload.sampleRate);
   });
 
-  // 開始錄音（renderer 通知）
+  // 開始錄音（renderer 觸發，例如 P1 stage 1 的按鈕測試用）
   ipcMain.on(IPC.START_RECORD, () => {
-    console.log('[main] START_RECORD received');
-    if (!audioIngest.recording) {
-      audioIngest.start();
-    }
-    if (asrManager?.initialized) {
-      try {
-        asrManager.start();
-        appState.setStatus('recording');
-      } catch (err) {
-        console.error('[main] asr start failed:', err);
-      }
-    } else {
-      console.warn('[main] asr manager not initialized, 純錄音模式');
-    }
+    doStartRecord();
   });
 
-  // 停止錄音（renderer 通知）
-  ipcMain.on(IPC.STOP_RECORD, async () => {
-    console.log('[main] STOP_RECORD received');
-    if (asrManager?.initialized) {
-      appState.setStatus('processing');
-      try {
-        const result = await asrManager.stop();
-        console.log(`[main] ASR result: "${result.text}" (${result.durationMs}ms)`);
-
-        // 文字注入（D-C 兩種模式：clipboard / clipboard-and-paste）
-        if (result.text) {
-          const settings = appState.getSettings();
-          const injectResult = await clipboardInjector.inject(
-            result.text,
-            settings.injectionMode,
-          );
-          if (injectResult.ok) {
-            console.log(`[main] injected ${injectResult.text.length} chars via ${settings.injectionMode}`);
-          } else {
-            console.warn(`[main] injection failed: ${injectResult.reason ?? 'unknown'}`);
-          }
-        }
-      } catch (err) {
-        console.error('[main] asr stop failed:', err);
-      }
-    }
-    if (audioIngest.recording) {
-      audioIngest.stop();
-    }
-    appState.setStatus('idle');
+  // 停止錄音（renderer 觸發）
+  ipcMain.on(IPC.STOP_RECORD, () => {
+    void doStopRecord();
   });
 }
 
-// 廣播 status 變更給所有 renderer
+// 廣播 status 變更給所有 renderer + 控制 indicator 顯示
 appState.on('status:changed', (next) => {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
       win.webContents.send(IPC.STATUS_CHANGED, { status: next });
     }
+  }
+
+  // 控制 indicator 浮窗顯示
+  if (next === 'recording' || next === 'processing') {
+    showIndicator();
+  } else if (next === 'idle' || next === 'error') {
+    // 短暫延遲隱藏，讓 final 結果能顯示 0.5s
+    setTimeout(() => {
+      hideIndicator();
+    }, 500);
   }
 });

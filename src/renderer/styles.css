@@ -304,3 +304,113 @@ kbd {
 .asr-history li:last-child {
   border-bottom: none;
 }
+
+/* ===== P1 stage 4: Indicator 浮窗 ===== */
+
+.indicator {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 透明背景，視窗本身已 transparent:true */
+  background: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.indicator-card {
+  background: rgba(20, 20, 20, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 10px 16px;
+  min-width: 240px;
+  max-width: 320px;
+  color: #fff;
+  font-size: 13px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.indicator-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.indicator-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.indicator-dot-idle {
+  background: #4a9eff;
+}
+
+.indicator-dot-recording {
+  background: #ff5252;
+  animation: indicator-pulse 1s infinite;
+}
+
+.indicator-dot-processing {
+  background: #ffd966;
+  animation: indicator-pulse 0.6s infinite;
+}
+
+.indicator-dot-error {
+  background: #ff5252;
+}
+
+@keyframes indicator-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.indicator-state {
+  font-weight: 600;
+  color: #fff;
+  min-width: 60px;
+}
+
+.indicator-level {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.indicator-level-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #66ff99 0%, #4a9eff 100%);
+  transition: width 0.05s linear;
+  width: 0;
+}
+
+.indicator-text {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: #ccc;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 300px;
+}
+
+.indicator-recording .indicator-card {
+  border-color: rgba(255, 82, 82, 0.3);
+}
+
+.indicator-processing .indicator-card {
+  border-color: rgba(255, 217, 102, 0.3);
+}

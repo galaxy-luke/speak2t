@@ -1,20 +1,36 @@
 /**
- * 全域快捷鍵管理（P0 簡化版）
+ * 全域快捷鍵管理
  *
- * 只負責註冊 / 解除註冊一個全域熱鍵，並在觸發時發出事件。
- * P1 階段會擴充：
- * - 支援 PTT（按下開始、放開停止）vs Toggle 模式
+ * P0 階段：純測試，觸發就切 recording 2 秒後回 idle
+ * P1 階段 4：改為 toggle 模式（D-A 決策）
+ *   - 第一次按：toggle 進入 recording，廣播 HOTKEY_RECORD_START
+ *   - 第二次按：toggle 回到 idle，廣播 HOTKEY_RECORD_STOP
+ *   - 真正的 startRecord/stopRecord 邏輯在 main/index.ts 監聽 broadcast 後執行
+ *
+ * 未來擴充（D-A + P1+1）：
+ * - PTT 模式（uiohook-napi key down/up 事件）
  * - 多組熱鍵
  * - 熱鍵衝突偵測
  */
 
-import { globalShortcut } from 'electron';
-import { appState } from '../../main/app-state';
+import { BrowserWindow, globalShortcut } from 'electron';
+import { EventEmitter } from 'node:events';
 import { IPC } from '../../shared/ipc-channels';
-import { getMainWindow } from '../../main/windows';
 
-export class HotkeyManager {
+export interface HotkeyManagerEvents {
+  /** toggle 切換（isRecording 是新狀態） */
+  toggle: (data: { isRecording: boolean; timestamp: number }) => void;
+}
+
+export declare interface HotkeyManager {
+  on<U extends keyof HotkeyManagerEvents>(event: U, listener: HotkeyManagerEvents[U]): this;
+  emit<U extends keyof HotkeyManagerEvents>(event: U, ...args: Parameters<HotkeyManagerEvents[U]>): boolean;
+  off<U extends keyof HotkeyManagerEvents>(event: U, listener: HotkeyManagerEvents[U]): this;
+}
+
+export class HotkeyManager extends EventEmitter {
   private currentHotkey: string | null = null;
+  private isRecording = false;
 
   /**
    * 註冊全域熱鍵
@@ -49,22 +65,51 @@ export class HotkeyManager {
     return this.currentHotkey !== null;
   }
 
+  /**
+   * 切換內部 recording 狀態並 emit 事件
+   * main 端訂閱此事件後執行真正的 record/stop 邏輯
+   */
   private onTrigger(): void {
-    console.log('[hotkey] triggered');
-    // P0 階段：直接在 console 印，並透過 IPC 通知 settings 視窗
-    appState.setStatus('recording');
+    this.isRecording = !this.isRecording;
+    const timestamp = Date.now();
 
-    const win = getMainWindow();
-    if (win && !win.isDestroyed()) {
-      win.webContents.send(IPC.HOTKEY_TRIGGERED, {
-        timestamp: Date.now(),
-      });
+    if (this.isRecording) {
+      console.log('[hotkey] → recording (toggle ON)');
+    } else {
+      console.log('[hotkey] → idle (toggle OFF)');
     }
 
-    // P0 階段：2 秒後自動回到 idle（純測試用）
-    setTimeout(() => {
-      appState.setStatus('idle');
-    }, 2000);
+    // 廣播到所有 renderer（給 UI 用：toast、indicator）
+    this.broadcast(
+      this.isRecording ? IPC.HOTKEY_RECORD_START : IPC.HOTKEY_RECORD_STOP,
+      { timestamp },
+    );
+
+    // emit 內部事件給 main 端（執行業務邏輯：start asr、stop asr、inject）
+    this.emit('toggle', { isRecording: this.isRecording, timestamp });
+  }
+
+  /**
+   * 廣播到所有 renderer
+   */
+  private broadcast(channel: string, payload: unknown): void {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send(channel, payload);
+      }
+    }
+  }
+
+  /** 對外暴露：取得當前 recording 狀態（給 main 端查） */
+  getRecording(): boolean {
+    return this.isRecording;
+  }
+
+  /** 對外暴露：強制設回 idle（用於 app 啟動時 reset） */
+  resetIdle(): void {
+    if (this.isRecording) {
+      this.isRecording = false;
+    }
   }
 }
 
