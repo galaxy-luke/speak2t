@@ -1,11 +1,15 @@
 /**
  * Vitest 設定
  *
- * 與 vite.config.ts 平行（vite.config.ts 是給 renderer build 用的，
+ * 與 vite.config.mjs 平行（vite.config.mjs 是給 renderer build 用的，
  * 這裡 vitest 要掃整個 src/ + tests/，不限定 renderer root）。
  */
 
 import { defineConfig } from 'vitest/config';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   test: {
@@ -16,7 +20,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': new URL('./src', import.meta.url).pathname,
+      '@': resolve(__dirname, 'src'),
     },
   },
 });
