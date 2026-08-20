@@ -13,13 +13,13 @@ import { EventEmitter } from 'node:events';
 import { app, BrowserWindow } from 'electron';
 import { join } from 'node:path';
 import { IPC } from '../../shared/ipc-channels';
-import type { AppSettings } from '../../shared/types';
+import type { AppSettings, AsrEngineType } from '../../shared/types';
 import type { AsrEngine, AsrConfig, AsrResult } from './engine';
 import { SherpaOnnxEngine } from './sherpa-onnx';
 import { WhisperCppEngine } from './whisper-cpp';
 import { postprocessWithReport } from '../postprocess';
 import { DEFAULT_RULES } from '../postprocess';
-import type { AsrPostprocessedPayload } from '../../shared/api';
+import type { AsrPostprocessedPayload, AsrEngineDegradedPayload } from '../../shared/api';
 
 export interface AsrManagerEvents {
   ready: () => void;
@@ -30,6 +30,10 @@ export interface AsrManagerEvents {
    * 即使未啟用後處理也會 emit（此時 appliedRules=[]、changed=false）
    */
   postprocessed: (report: AsrPostprocessedPayload) => void;
+  /**
+   * P3：引擎降級（sherpa 失敗 → 自動切 whisper）
+   */
+  degraded: (report: AsrEngineDegradedPayload) => void;
 }
 
 export declare interface AsrManager {
@@ -45,14 +49,34 @@ export class AsrManager extends EventEmitter {
   private totalDurationMs = 0;
   private lastFinalText = '';
 
+  // ===== P3 Stage 2：引擎降級狀態 =====
+  /** runtime 當前 engine（可能與 settings.asrEngine 不同，因降級） */
+  private currentEngine: AsrEngineType;
+  /** 降級用計數器（連續 feed 失敗達標就觸發） */
+  private consecutiveFeedFailures = 0;
+  /** 是否已降級過（避免重複降級） */
+  private hasDegraded = false;
+  /** 降級連續失敗 threshold */
+  private static readonly DEGRADE_THRESHOLD = 2;
+
   constructor(settings: AppSettings) {
     super();
     this.settings = settings;
+    this.currentEngine = settings.asrEngine;
   }
 
   /**
-   * 初始化當前設定的引擎（依 settings.asrEngine 決定 sherpa / whisper）
+   * 取得 runtime 當前 engine（可能與 settings.asrEngine 不同）
+   */
+  get runtimeEngine(): AsrEngineType {
+    return this.currentEngine;
+  }
+
+  /**
+   * 初始化當前設定的引擎
    * 必須先 init 才能 start/feed
+   *
+   * P3 Stage 2：若 settings.autoDegrade 開，初始化失敗時自動切到備援引擎
    */
   async init(): Promise<void> {
     if (this.engine) {
@@ -61,29 +85,32 @@ export class AsrManager extends EventEmitter {
       this.engine = null;
     }
 
-    const modelDir = this.resolveModelDir();
+    // 重置降級狀態（user 重新 init 通常是想從頭來）
+    this.consecutiveFeedFailures = 0;
 
+    const modelDir = this.resolveModelDir();
     const config: AsrConfig = {
-      engine: this.settings.asrEngine,
+      engine: this.currentEngine,
       modelPreset: this.settings.asrModelPreset,
       customPath: this.settings.customModelPath || undefined,
       modelDir,
       sampleRate: this.settings.audioSampleRate,
     };
 
-    if (this.settings.asrEngine === 'sherpa-onnx') {
+    if (this.currentEngine === 'sherpa-onnx') {
       this.engine = new SherpaOnnxEngine();
-    } else if (this.settings.asrEngine === 'whisper-cpp') {
+    } else if (this.currentEngine === 'whisper-cpp') {
       this.engine = new WhisperCppEngine();
     } else {
-      throw new Error(
-        `ASR engine "${this.settings.asrEngine}" 尚未支援`,
-      );
+      throw new Error(`ASR engine "${this.currentEngine}" 尚未支援`);
     }
 
     // wire engine 事件 → IPC 廣播
     this.engine.on('partial', (text, isEndpoint, segment) => {
       console.log(`[asr.manager] partial: "${text}" endpoint=${isEndpoint} seg=${segment}`);
+
+      // 成功收到 partial → 重置失敗計數
+      this.consecutiveFeedFailures = 0;
 
       // broadcast 到所有 renderer
       const payload = { text, isEndpoint, segment, timestamp: Date.now() };
@@ -121,11 +148,49 @@ export class AsrManager extends EventEmitter {
     try {
       await this.engine.init(config);
     } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.warn(`[asr.manager] ${this.currentEngine} init 失敗：${errorMsg}`);
+
       // 清掉 engine reference
       this.engine.dispose();
       this.engine = null;
+
+      // P3 Stage 2：嘗試自動降級
+      if (this.settings.autoDegrade && !this.hasDegraded) {
+        const fallback = this.currentEngine === 'sherpa-onnx' ? 'whisper-cpp' : 'sherpa-onnx';
+        console.log(`[asr.manager] 自動降級：${this.currentEngine} → ${fallback}`);
+        this.degradeTo(fallback, `init 失敗：${errorMsg}`);
+        // 遞迴重試（這次會用新 engine）
+        return this.init();
+      }
+
+      // 無降級可用或已降級過
       throw err;
     }
+  }
+
+  /**
+   * P3 Stage 2：降級到指定 engine（runtime 切換，不改 settings.asrEngine）
+   * 廣播 ASR_ENGINE_DEGRADED 給 UI 顯示提示
+   */
+  private degradeTo(target: AsrEngineType, reason: string): void {
+    const from = this.currentEngine;
+    this.currentEngine = target;
+    this.hasDegraded = true;
+
+    const payload: AsrEngineDegradedPayload = {
+      from,
+      to: target,
+      reason,
+      timestamp: Date.now(),
+    };
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send(IPC.ASR_ENGINE_DEGRADED, payload);
+      }
+    }
+    this.emit('degraded', payload);
+    console.log(`[asr.manager] 降級完成：${from} → ${target}（${reason}）`);
   }
 
   /**
@@ -154,14 +219,35 @@ export class AsrManager extends EventEmitter {
 
   /**
    * 餵入 audio chunk（給 audio.ingest 'chunk' event listener 用）
+   *
+   * P3 Stage 2：連續 feed 失敗計數，達標觸發降級
    */
   feed(samples: Float32Array, sampleRate: number): void {
     if (!this.engine) return;
     try {
       this.engine.feed(samples, sampleRate);
+      // 成功 → 失敗計數已在 partial event listener 重置（這裡再保險一次）
+      this.consecutiveFeedFailures = 0;
     } catch (err) {
-      console.error('[asr.manager] feed error:', err);
-      this.emit('error', err instanceof Error ? err : new Error(String(err)));
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error('[asr.manager] feed error:', errorMsg);
+      this.consecutiveFeedFailures++;
+      this.emit('error', err instanceof Error ? err : new Error(errorMsg));
+
+      // P3 Stage 2：達標觸發降級
+      if (
+        this.settings.autoDegrade &&
+        !this.hasDegraded &&
+        this.consecutiveFeedFailures >= AsrManager.DEGRADE_THRESHOLD
+      ) {
+        const fallback =
+          this.currentEngine === 'sherpa-onnx' ? 'whisper-cpp' : 'sherpa-onnx';
+        console.warn(
+          `[asr.manager] 連續 ${this.consecutiveFeedFailures} 次 feed 失敗，自動降級：${this.currentEngine} → ${fallback}`,
+        );
+        this.degradeTo(fallback, `連續 feed 失敗 ${this.consecutiveFeedFailures} 次`);
+        // 下一輪錄音會用 fallback engine（不立即 re-init，避免中斷正在跑的 session）
+      }
     }
   }
 
@@ -232,9 +318,13 @@ export class AsrManager extends EventEmitter {
   /**
    * 切換引擎（settings 變更時呼叫）
    * 會 dispose 舊 engine、init 新 engine
+   *
+   * P3 Stage 2：user 手動切回時重置 hasDegraded 旗標（讓再次降級可用）
    */
   async switchEngine(newSettings: AppSettings): Promise<void> {
     this.settings = newSettings;
+    this.currentEngine = newSettings.asrEngine;
+    this.hasDegraded = false; // user 明確切換，重置降級狀態
     await this.init();
   }
 

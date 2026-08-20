@@ -25,6 +25,7 @@ import type {
   DownloadExistsPayload,
   DownloadCancelledPayload,
   AsrPostprocessedPayload,
+  AsrEngineDegradedPayload,
 } from '../shared/api';
 
 const api: Speak2tApi = {
@@ -166,6 +167,12 @@ const api: Speak2tApi = {
     const listener = (_event: unknown, data: AsrPostprocessedPayload) => callback(data);
     ipcRenderer.on(IPC.ASR_POSTPROCESSED, listener);
     return () => ipcRenderer.removeListener(IPC.ASR_POSTPROCESSED, listener);
+  },
+
+  onAsrEngineDegraded: (callback) => {
+    const listener = (_event: unknown, data: AsrEngineDegradedPayload) => callback(data);
+    ipcRenderer.on(IPC.ASR_ENGINE_DEGRADED, listener);
+    return () => ipcRenderer.removeListener(IPC.ASR_ENGINE_DEGRADED, listener);
   },
 };
 

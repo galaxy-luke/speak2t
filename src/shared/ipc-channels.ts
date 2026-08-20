@@ -83,4 +83,6 @@ export const IPC = {
   // ASR 後處理（main → renderer 廣播）
   /** 標點後處理結果（給 debug UI 用） */
   ASR_POSTPROCESSED: 'broadcast:asr:postprocessed',
+  /** 引擎自動降級通知（sherpa 失敗 → 切 whisper） */
+  ASR_ENGINE_DEGRADED: 'broadcast:asr:engine-degraded',
 } as const;

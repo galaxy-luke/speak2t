@@ -8,7 +8,7 @@
  * 確保 main / preload / renderer 三方對 API shape 有一致共識。
  */
 
-import type { AppSettings, AppStatus } from './types';
+import type { AppSettings, AppStatus, AsrEngineType } from './types';
 
 export interface Speak2tApi {
   // ===== 設定 =====
@@ -88,6 +88,8 @@ export interface Speak2tApi {
 
   /** P3：ASR 文字後處理結果（給 debug UI 用） */
   onAsrPostprocessed: (callback: (data: AsrPostprocessedPayload) => void) => () => void;
+  /** P3：引擎降級通知 */
+  onAsrEngineDegraded: (callback: (data: AsrEngineDegradedPayload) => void) => () => void;
 }
 
 // ===== 既有 payload =====
@@ -211,6 +213,17 @@ export interface AsrPostprocessedPayload {
   skippedRules: string[];
   /** 是否有變化 */
   changed: boolean;
+  timestamp: number;
+}
+
+/** ASR 引擎降級通知（sherpa 失敗 → 自動切 whisper） */
+export interface AsrEngineDegradedPayload {
+  /** 原 engine */
+  from: AsrEngineType;
+  /** 降級目標 engine */
+  to: AsrEngineType;
+  /** 降級原因 */
+  reason: string;
   timestamp: number;
 }
 
