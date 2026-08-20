@@ -86,6 +86,22 @@ export interface Speak2tApi {
   /** SHA-256 校驗結果（verify 通過時觸發） */
   onDownloadVerified: (callback: (data: DownloadVerifiedPayload) => void) => () => void;
 
+  // ===== TOFU 自我校驗（commit 3-4）=====
+
+  /** 對單一已下載模型做校驗（手動觸發） */
+  verifyModel: (presetKey: string) => Promise<VerificationResultPayload>;
+  /** 對所有已下載模型做校驗（app 啟動時背景 / 手動觸發） */
+  verifyAllModels: () => Promise<VerificationResultPayload[]>;
+  /** 清除某個 preset 的 TOFU baseline */
+  removeTofuBaseline: (presetKey: string) => Promise<void>;
+
+  /** TOFU baseline 已建立 */
+  onTofuEstablished: (callback: (data: TofuEstablishedPayload) => void) => () => void;
+  /** TOFU baseline 已移除 */
+  onTofuRemoved: (callback: (data: TofuRemovedPayload) => void) => () => void;
+  /** 校驗結果（給 UI 顯示 5 態標籤） */
+  onVerificationResult: (callback: (data: VerificationResultPayload) => void) => () => void;
+
   // ===== P3 新增 =====
 
   /** P3：ASR 文字後處理結果（給 debug UI 用） */
@@ -247,6 +263,51 @@ export interface DownloadExistsPayload {
 /** 取消下載 */
 export interface DownloadCancelledPayload {
   preset: string;
+  timestamp: number;
+}
+
+// ===== TOFU 自我校驗 payload（commit 3-4）=====
+
+/** TOFU baseline 已建立（從 downloader 自動建 / 手動建時觸發） */
+export interface TofuEstablishedPayload {
+  preset: string;
+  /** 新建的 baseline */
+  baseline: {
+    sha256: string;
+    sizeBytes: number;
+    establishedAt: string;
+    source: 'auto' | 'manual';
+  };
+  timestamp: number;
+}
+
+/** TOFU baseline 已移除（UI 清除按鈕觸發） */
+export interface TofuRemovedPayload {
+  preset: string;
+  timestamp: number;
+}
+
+/** 校驗結果（5 態）— 給 UI 顯示標籤用 */
+export type VerificationStatusValue =
+  | 'official-verified'
+  | 'tofu-verified'
+  | 'mismatch'
+  | 'no-baseline'
+  | 'not-installed';
+
+export interface VerificationResultPayload {
+  preset: string;
+  status: VerificationStatusValue;
+  /** 整體 hash（hex lowercase）；not-installed 時為 null */
+  actualHash: string | null;
+  /** 總大小 */
+  fileSize: number;
+  /** 哪個 baseline 在比（official / tofu）— 給 UI 顯示細節用 */
+  baselineKind: 'official' | 'tofu' | 'none';
+  /** 官方 baseline hex（若有） */
+  officialSha256: string | null;
+  /** TOFU baseline sha256（若有） */
+  tofuSha256: string | null;
   timestamp: number;
 }
 

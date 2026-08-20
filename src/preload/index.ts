@@ -25,6 +25,9 @@ import type {
   DownloadExistsPayload,
   DownloadCancelledPayload,
   DownloadVerifiedPayload,
+  TofuEstablishedPayload,
+  TofuRemovedPayload,
+  VerificationResultPayload,
   AsrPostprocessedPayload,
   AsrEngineDegradedPayload,
   UpdateAvailablePayload,
@@ -170,6 +173,30 @@ const api: Speak2tApi = {
     const listener = (_event: unknown, data: DownloadVerifiedPayload) => callback(data);
     ipcRenderer.on(IPC.DOWNLOAD_VERIFIED, listener);
     return () => ipcRenderer.removeListener(IPC.DOWNLOAD_VERIFIED, listener);
+  },
+
+  // ===== TOFU 自我校驗 =====
+  verifyModel: (presetKey) =>
+    ipcRenderer.invoke(IPC.VERIFY_MODEL, presetKey) as Promise<VerificationResultPayload>,
+  verifyAllModels: () =>
+    ipcRenderer.invoke(IPC.VERIFY_ALL_MODELS) as Promise<VerificationResultPayload[]>,
+  removeTofuBaseline: (presetKey) =>
+    ipcRenderer.invoke(IPC.REMOVE_TOFU, presetKey) as Promise<void>,
+
+  onTofuEstablished: (callback) => {
+    const listener = (_event: unknown, data: TofuEstablishedPayload) => callback(data);
+    ipcRenderer.on(IPC.TOFU_ESTABLISHED, listener);
+    return () => ipcRenderer.removeListener(IPC.TOFU_ESTABLISHED, listener);
+  },
+  onTofuRemoved: (callback) => {
+    const listener = (_event: unknown, data: TofuRemovedPayload) => callback(data);
+    ipcRenderer.on(IPC.TOFU_REMOVED, listener);
+    return () => ipcRenderer.removeListener(IPC.TOFU_REMOVED, listener);
+  },
+  onVerificationResult: (callback) => {
+    const listener = (_event: unknown, data: VerificationResultPayload) => callback(data);
+    ipcRenderer.on(IPC.VERIFICATION_RESULT, listener);
+    return () => ipcRenderer.removeListener(IPC.VERIFICATION_RESULT, listener);
   },
 
   // ===== P3：ASR 後處理事件 =====

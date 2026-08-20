@@ -80,6 +80,22 @@ export const IPC = {
   /** SHA-256 校驗結果（verify 通過時） */
   DOWNLOAD_VERIFIED: 'broadcast:download:verified',
 
+  // TOFU 自我校驗（commit 3-4 新增）
+  /** 對單一已下載模型做校驗（手動觸發） */
+  VERIFY_MODEL: 'invoke:model:verify',
+  /** 對所有已下載模型做校驗（app 啟動時背景 / 手動觸發） */
+  VERIFY_ALL_MODELS: 'invoke:model:verify-all',
+  /** 清除某個 preset 的 TOFU baseline */
+  REMOVE_TOFU: 'invoke:model:remove-tofu',
+
+  // TOFU 事件（main → renderer 廣播）
+  /** TOFU baseline 已建立 */
+  TOFU_ESTABLISHED: 'broadcast:tofu:established',
+  /** TOFU baseline 已移除 */
+  TOFU_REMOVED: 'broadcast:tofu:removed',
+  /** 校驗結果（給 UI 顯示 5 態標籤） */
+  VERIFICATION_RESULT: 'broadcast:verification:result',
+
   // ===== P3 新增 =====
 
   // ASR 後處理（main → renderer 廣播）

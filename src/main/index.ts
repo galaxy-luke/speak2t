@@ -38,12 +38,17 @@ import type {
   DownloadExistsPayload,
   DownloadCancelledPayload,
   DownloadVerifiedPayload,
+  TofuEstablishedPayload,
+  TofuRemovedPayload,
+  VerificationResultPayload,
   UpdateAvailablePayload,
   UpdateUpToDatePayload,
   UpdateDownloadProgressPayload,
   UpdateDownloadedPayload,
   UpdateErrorPayload,
 } from '../shared/api';
+import { verifyModel } from '../functions/model/verifier';
+import type { TofuBaseline } from '../shared/types';
 
 // 單一實例鎖
 const gotTheLock = app.requestSingleInstanceLock();
@@ -87,17 +92,23 @@ if (!gotTheLock) {
     // 7. Model downloader 事件 wiring
     wireModelDownloader();
 
-    // 8. 開機自動啟動套用（P2 Stage 3）
+    // 8. TOFU 自我校驗事件 wiring（commit 4）
+    wireTofuEvents();
+
+    // 9. 背景跑全部已下載模型的 verify（不阻塞啟動）
+    void runBackgroundVerifyAll();
+
+    // 10. 開機自動啟動套用（P2 Stage 3）
     applyAutoStart(appState.getSettings().autoStart);
     appState.on('settings:changed', (next) => {
       applyAutoStart(next.autoStart);
     });
 
-    // 9. 自動更新（P4 Stage 2）
+    // 11. 自動更新（P4 Stage 2）
     initUpdateManager();
     wireUpdateManager();
 
-    // 10. macOS 特殊處理（雖然 P0 是 Windows 優先）
+    // 12. macOS 特殊處理（雖然 P0 是 Windows 優先）
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         createMainWindow();
@@ -305,6 +316,42 @@ function registerIpcHandlers(): void {
     modelDownloader.cancelDownload();
   });
 
+  // ===== TOFU 自我校驗 IPC（commit 4）=====
+
+  // 對單一已下載模型做校驗
+  ipcMain.handle(IPC.VERIFY_MODEL, async (_event, presetKey: string): Promise<VerificationResultPayload> => {
+    const modelInfo = modelDownloader.listModels().find((m) => m.key === presetKey);
+    if (!modelInfo) {
+      throw new Error(`未知模型 key：${presetKey}`);
+    }
+    const tofuMap = appState.getSettings().tofuBaselines as Record<string, TofuBaseline>;
+    const result = await verifyModel(modelInfo.path, {
+      officialSha256: modelInfo.sha256,
+      tofuBaseline: tofuMap[presetKey] ?? null,
+    });
+    return toVerificationPayload(presetKey, result);
+  });
+
+  // 對所有已下載模型做校驗
+  ipcMain.handle(IPC.VERIFY_ALL_MODELS, async (): Promise<VerificationResultPayload[]> => {
+    const results: VerificationResultPayload[] = [];
+    const tofuMap = appState.getSettings().tofuBaselines as Record<string, TofuBaseline>;
+    for (const m of modelDownloader.listModels()) {
+      if (!m.installed) continue;
+      const result = await verifyModel(m.path, {
+        officialSha256: m.sha256,
+        tofuBaseline: tofuMap[m.key] ?? null,
+      });
+      results.push(toVerificationPayload(m.key, result));
+    }
+    return results;
+  });
+
+  // 清除 TOFU baseline
+  ipcMain.handle(IPC.REMOVE_TOFU, (_event, presetKey: string) => {
+    modelDownloader.removeTofu(presetKey);
+  });
+
   // ===== P4 Stage 2：自動更新 IPC =====
 
   // 觸發檢查
@@ -445,6 +492,90 @@ function wireModelDownloader(): void {
       }
     }
   });
+}
+
+/**
+ * 將 verifier 的 VerificationResult 轉成 renderer-friendly VerificationResultPayload
+ */
+function toVerificationPayload(preset: string, r: Awaited<ReturnType<typeof verifyModel>>): VerificationResultPayload {
+  let baselineKind: 'official' | 'tofu' | 'none';
+  if (r.officialSha256) {
+    baselineKind = r.status === 'official-verified' || r.status === 'mismatch' ? 'official' : 'none';
+  } else if (r.tofuBaseline) {
+    baselineKind = 'tofu';
+  } else {
+    baselineKind = 'none';
+  }
+  return {
+    preset,
+    status: r.status,
+    actualHash: r.actualHash,
+    fileSize: r.fileSize,
+    baselineKind,
+    officialSha256: r.officialSha256,
+    tofuSha256: r.tofuBaseline?.sha256 ?? null,
+    timestamp: Date.now(),
+  };
+}
+
+/**
+ * Wire TOFU 自我校驗事件 → broadcast IPC
+ * commit 4：TOFU baseline 建立 / 移除 / 校驗結果都即時通知 renderer
+ */
+function wireTofuEvents(): void {
+  const broadcast = (channel: string, payload: unknown) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send(channel, payload);
+      }
+    }
+  };
+
+  modelDownloader.on('tofuEstablished', (e) => {
+    console.log(`[main] TOFU baseline 已建立：${e.preset}`);
+    const payload: TofuEstablishedPayload = { ...e, timestamp: Date.now() };
+    broadcast(IPC.TOFU_ESTABLISHED, payload);
+  });
+
+  modelDownloader.on('tofuRemoved', (e) => {
+    console.log(`[main] TOFU baseline 已移除：${e.preset}`);
+    const payload: TofuRemovedPayload = { ...e, timestamp: Date.now() };
+    broadcast(IPC.TOFU_REMOVED, payload);
+  });
+
+  modelDownloader.on('verificationResult', (e) => {
+    const payload = toVerificationPayload(e.preset, e.result);
+    broadcast(IPC.VERIFICATION_RESULT, payload);
+    if (payload.status === 'mismatch') {
+      console.warn(
+        `[main] 模型校驗失敗：${e.preset} actual=${e.result.actualHash?.slice(0, 16)}… baseline=${payload.baselineKind}`,
+      );
+    }
+  });
+}
+
+/**
+ * 背景跑全部已下載模型的校驗（commit 4）
+ * 啟動時呼叫，背景不阻塞；結果透過 verificationResult event 廣播
+ *
+ * 不阻擋：每個模型若驗失敗，console.warn 但不 throw
+ */
+async function runBackgroundVerifyAll(): Promise<void> {
+  try {
+    const results = await modelDownloader.verifyAll();
+    const mismatched = results.filter((r) => r.status === 'mismatch');
+    if (mismatched.length > 0) {
+      console.warn(
+        `[main] 背景校驗發現 ${mismatched.length} 個模型檔案被竊改或損壞，建議重新下載`,
+      );
+    } else {
+      console.log(`[main] 背景校驗：${results.length} 個模型全部通過`);
+    }
+  } catch (err) {
+    console.warn(
+      `[main] 背景校驗失敗：${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }
 
 // 廣播 status 變更給所有 renderer + 控制 indicator 顯示
