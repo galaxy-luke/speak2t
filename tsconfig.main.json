@@ -18,5 +18,5 @@
     "skipLibCheck": true
   },
   "include": ["src/main/**/*", "src/functions/**/*", "src/shared/**/*"],
-  "exclude": ["node_modules", "dist", "release", "src/renderer", "src/preload"]
+  "exclude": ["node_modules", "dist", "release", "src/renderer", "src/preload", "**/__tests__/**"]
 }
