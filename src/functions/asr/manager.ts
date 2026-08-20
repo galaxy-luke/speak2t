@@ -16,6 +16,7 @@ import { IPC } from '../../shared/ipc-channels';
 import type { AppSettings } from '../../shared/types';
 import type { AsrEngine, AsrConfig, AsrResult } from './engine';
 import { SherpaOnnxEngine } from './sherpa-onnx';
+import { WhisperCppEngine } from './whisper-cpp';
 
 export interface AsrManagerEvents {
   ready: () => void;
@@ -64,10 +65,11 @@ export class AsrManager extends EventEmitter {
 
     if (this.settings.asrEngine === 'sherpa-onnx') {
       this.engine = new SherpaOnnxEngine();
+    } else if (this.settings.asrEngine === 'whisper-cpp') {
+      this.engine = new WhisperCppEngine();
     } else {
-      // whisper.cpp 留 stage 5
       throw new Error(
-        `ASR engine "${this.settings.asrEngine}" 尚未實作（P1 stage 5 才做）`,
+        `ASR engine "${this.settings.asrEngine}" 尚未支援`,
       );
     }
 
