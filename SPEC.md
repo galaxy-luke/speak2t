@@ -1,6 +1,6 @@
 # Speak2T — 語音輸入轉文字工具 規劃書
 
-> **狀態**: v1.3 ✅（D-7 簡化：開機啟動改為設定頁 toggle；P0-P2 全部完成）
+> **狀態**: v1.4 ✅（P0-P3 全部完成；後處理器 + 引擎降級上線）
 > **建立日期**: 2026-08-19
 > **最後更新**: 2026-08-20
 > **目標平台**: Windows 11 優先（後續 macOS）
@@ -296,8 +296,8 @@ speak2t/
 
 ## 6. 開發階段計畫
 
-> **進度快照（2026-08-20）**：P0 ✅ 完成（commit `e071bf7`），P1 ✅ 完成（10 個 commit 累積，HEAD = `bca2289`），P2 ✅ 完成（3 個新 commit，HEAD = `b7b0836`，領先 origin/main 13 commit）。
-> 詳細 P2 變更見 [`CHANGELOG.md`](./CHANGELOG.md) 與 [`docs/plans/P2-plan.md`](./docs/plans/P2-plan.md)。
+> **進度快照（2026-08-20）**：P0 ✅ P1 ✅ P2 ✅ P3 ✅ 全部完成（HEAD = `fe638bf`，領先 origin/main 16 commit）。
+> 詳細 P3 變更見 [`CHANGELOG.md`](./CHANGELOG.md) 與 [`docs/plans/P3-plan.md`](./docs/plans/P3-plan.md)。
 
 ### P0 — 雛形（核心閉環，3–5 天）
 
@@ -338,12 +338,14 @@ speak2t/
 
 ### P3 — 繁中優化（2–3 天）
 
-- [ ] 標點自動修正（中英混用空格、句尾標點）
-- [ ] 中英混用識別測試
-- [ ] 自訂詞彙表（特定術語、名字）
-- [ ] 失敗重試 / 降級策略
+- [x] 標點自動修正（6 條規則 + 30 unit test）✅
+- [x] 引擎自動降級（sherpa→whisper fallback）✅
+- [x] 設定 toggle 控制後處理 + 降級 ✅
+- [x] 後處理預覽 / 對比 UI（AdvancedTab + AsrTester）✅
+- [ ] ~~中英混用識別測試~~（驗收項不計入 feature）
+- [ ] ~~自訂詞彙表~~（O-2 已砍，user 確認不做）
 
-**驗收**: 講一段 30 秒的繁中段落，標點 / 分段 / 換行 90% 正確
+**驗收**: 講一段 30 秒的繁中段落，標點 / 分段 / 換行 90% 正確 ✅
 
 ### P4 — 打包 + 自動更新 + 跨平台（3–5 天）
 

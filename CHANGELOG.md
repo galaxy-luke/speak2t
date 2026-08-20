@@ -1,5 +1,121 @@
 # Changelog
 
+## [P3] - 2026-08-20
+
+### Highlights
+
+Speak2T 進入 P3 階段，完成繁中優化的核心：標點自動修正、引擎自動降級、UI 控制與驗收介面。  
+**標點修正後**：`我今天meeting蘋果13` → `我今天 meeting 蘋果 13。`（自動套用 6 條規則）。  
+**引擎降級**：sherpa 啟動失敗或連續 2 次 feed 失敗時，自動切換到 whisper，避免 ASR 完全死掉。
+
+### Added
+
+#### Stage 1 — 標點自動修正（後處理器）
+- `src/functions/postprocess/` 新模組：
+  - `types.ts`：PostprocessRule / PostprocessOptions / PostprocessResult
+  - `rules/`：6 條規則
+    - `trim-whitespace`：頭尾空白 trim
+    - `cn-en-space`：中英交界加空格（`我今天meeting` → `我今天 meeting`）
+    - `cn-digit-space`：中數交界加空格，含 `(?<!\.)` lookbehind 排除小數點（`1.5倍` 不會被拆）
+    - `comma-normalize`：CJK 上下文中的英文逗號/句號改中文（純英文不動）
+    - `trailing-period`：句尾無標點加中文句號
+    - `collapse-spaces`：連續空白折疊
+  - `punctuation.ts`：`postprocess()` + `postprocessWithReport()` 主函式
+- `src/functions/postprocess/__tests__/punctuation.test.ts`：**30 個 unit test**（每條規則 3+ 個 case + 整合 + disabledRules + report）
+- `vitest.config.ts`：vitest 設定（與 vite.config.ts 平行，include src/**）
+- shared/types.ts：AppSettings 加 `postprocessEnabled`（預設 true）+ `autoDegrade`（預設 true）
+- shared：IPC 加 `ASR_POSTPROCESSED` broadcast + `AsrPostprocessedPayload`
+- AsrManager.stop() 整合：
+  - 套用 postprocess → 廣播 ASR_POSTPROCESSED 給 debug UI
+  - ASR_FINAL 廣播的是已後處理文字（注入剪貼簿的版本）
+  - 關 postprocessEnabled → 全部 disabled，無變化
+
+#### Stage 2 — 引擎自動降級
+- AsrManager 新增降級狀態：
+  - `currentEngine`：runtime engine（可與 settings.asrEngine 不同）
+  - `consecutiveFeedFailures`：連續 feed 失敗計數
+  - `hasDegraded`：是否已降級過（避免重複降級）
+  - `DEGRADE_THRESHOLD = 2`
+- 兩種降級觸發：
+  1. `init()` 失敗 → 自動切備援引擎並遞迴重試
+  2. `feed()` 連續失敗達標 → 標記降級（下輪錄音用新 engine）
+- `settings.autoDegrade` 開關：off 時不降級
+- 降級廣播 `ASR_ENGINE_DEGRADED`（from/to/reason）
+- `switchEngine()` 重置 hasDegraded（user 明確切換 → 重新可用降級）
+- `partial` 成功時重置失敗計數（避免誤判降級）
+- shared：加 `ASR_ENGINE_DEGRADED` channel + `AsrEngineDegradedPayload`
+
+#### Stage 3 — 設定 toggle + 預覽 / 對比 UI
+- `GeneralTab` 加 2 個 toggle：
+  - 「自動標點修正」→ 寫 `settings.postprocessEnabled`
+  - 「自動引擎降級」→ 寫 `settings.autoDegrade`
+- `PostprocessPreview` 子元件（AdvancedTab 內嵌）：
+  - 5 句範例（中英混講 / 英文夾雜 / 多個中英交界 / 英文逗號 / 換行中英）
+  - 顯示原始 vs 後處理對比 + 套用規則 chip
+  - 可切換「套用 / 不套用」即時看效果
+  - 直接呼叫 postprocess 模組（純前端，無 IPC）
+- `AsrTester` 加 ASR_POSTPROCESSED 訂閱：
+  - 顯示「ASR 原始」vs「注入版本」對比
+  - 列出套用規則 chip
+  - 10 秒後自動清掉
+
+### Changed
+
+- `PostprocessResult` 加 `changed` 欄位（processed !== original）
+- shared/api.ts：加 `AsrPostprocessedPayload` / `AsrEngineDegradedPayload`
+- shared/ipc-channels.ts：加 2 個 broadcast channel
+- shared/types.ts：AppSettings 加 2 個 boolean 欄位
+- styles.css：加 postprocess-compare / preview-list / rule-chip 等樣式
+
+### Test Coverage
+
+- **30 unit tests** in `src/functions/postprocess/__tests__/punctuation.test.ts`
+- 每條規則至少 3 個 case（正例 + 反例 + 邊界）
+- 整合測試：複合情境、disabledRules、report 格式
+
+### Tech Debt 處理
+
+- ❌ P3 沒處理升級 `@vitejs/plugin-react`（v5 留 P3 之後）
+- ❌ 沒有 in-app TTS 自動測試按鈕（Stage 3 改用純前端 postprocess 預覽，避免 Web Speech API 跨平台差異）
+- ❌ 中英夾雜的 hot-word 排除清單（O-2 砍詞彙表，無法做）
+
+### P3 Out of Scope（明確不做）
+
+- ❌ 自訂詞彙表（O-2 已砍）
+- ❌ 文法錯誤修正
+- ❌ 即時 partial 標點（partial 階段不做後處理，只在 final 做）
+- ❌ 翻譯
+- ❌ 個人化標點風格
+
+### Commits
+
+累計 3 個新 commit（P3）：
+
+1. `dd07c9e` feat: P3 stage 1 - 標點自動修正 (postprocess 模組 + 30 unit tests)
+2. `b68447e` feat: P3 stage 2 - 引擎自動降級 (sherpa→whisper fallback)
+3. `fe638bf` feat: P3 stage 3 - 設定 toggle + 後處理預覽/對比 UI
+
+### P3 User Setup Required
+
+P3 不需新安裝步驟，直接用：
+
+```powershell
+cd D:\My_Projects\Speak2T
+npm install --legacy-peer-deps  # 如果是新環境
+npm run dev
+```
+
+開設定 → 一般 tab → 看到 2 個新 toggle（預設都開）。  
+進階 tab → 看到「後處理規則預覽」可即時試。
+
+### Known Limitations（P3 新增）
+
+- `iPhone` / `e-mail` 等常見英文詞會被 cn-en-space 規則拆（trade-off，O-2 砍詞彙表）
+- 降級只觸發一次（sherpa→whisper 後不再降；user 重啟 app 可重新評估）
+- Web Speech API 跨平台品質差異大 → Stage 3 改用純前端預覽，不做 in-app TTS 自動測試
+
+---
+
 ## [P2] - 2026-08-20
 
 ### Highlights
