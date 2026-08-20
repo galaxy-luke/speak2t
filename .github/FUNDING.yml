@@ -1,0 +1,11 @@
+# GitHub 內建贊助機制
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/displaying-a-sponsor-button-in-your-repository
+#
+# 觸發位置：README 頂部會自動顯示「Sponsor」按鈕
+
+github: galaxy-luke
+ko_fi: otter2studio
+
+# 加密貨幣（多鏈 address 列在 README Donate 區塊，這裡只放一條彙總入口）
+custom:
+  - "🪙 Crypto (BTC/ETH/USDC/USDT/SOL/ENA): https://github.com/galaxy-luke/speak2t#-donate"

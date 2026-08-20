@@ -26,7 +26,7 @@ export function createTray(): Tray {
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: '開啟 Speak2T',
+      label: '開啟 聲打 / Speak2T',
       click: () => showMainWindow(),
     },
     { type: 'separator' },
@@ -39,7 +39,7 @@ export function createTray(): Tray {
     },
   ]);
 
-  tray.setToolTip('Speak2T — 語音輸入工具');
+  tray.setToolTip('聲打 / Speak2T — 語音輸入工具');
   tray.setContextMenu(contextMenu);
   tray.on('click', () => showMainWindow());
 

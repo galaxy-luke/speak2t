@@ -1,6 +1,10 @@
-# Speak2T
+# 聲打 / Speak2T
 
-> 為台灣繁體中文使用者打造的桌面語音輸入工具 — 本機處理、隱私優先。
+> Speak2T 為台灣繁中使用者打造的桌面語音輸入工具。
+> 按下全域快捷鍵 → 講話 → 文字自動注入當前焦點視窗。
+> 本機 ASR（sherpa-onnx 雙引擎），模型下載後無需網路。
+>
+> A free, open-source desktop voice-to-text tool for Traditional Chinese users in Taiwan.
 
 按一下全域快捷鍵，講話，再按一下，文字自動寫入當前焦點視窗游標處。
 
@@ -110,6 +114,68 @@ npm run build       # 產出 dist/（可手動跑）
 P1 / P2 變更見 [`CHANGELOG.md`](./CHANGELOG.md)。  
 P1 / P2 計畫見 [`docs/plans/`](./docs/plans/)。  
 開發紀律見 [`AGENTS.md`](./AGENTS.md)。
+
+## 💖 Donate
+
+如果 Speak2T 對你有幫助，歡迎贊助支持開發 ☕
+
+### 💳 一般付款
+
+- **KO-FI**：[ko-fi.com/otter2studio](https://ko-fi.com/otter2studio)
+- **街口支付**：[轉帳連結](https://service.jkopay.com/r/transfer?j=Transfer:900310585&amount=50)
+  （打開街口 App、預設 50 元、可自訂金額；對方 ID: `900310585`）
+
+### 🪙 加密貨幣
+
+| 幣種 | 鏈 | Address | 備註 |
+|------|-----|---------|------|
+| BTC | Bitcoin (Taproot) | `bc1pel9nq7qfw0wfcr77ay6gjrtnr0xh478jn0jgz5uj4cqp5jc866ls9099eq` | Taproot 手續費最低、隱私最好 |
+| ETH | EVM 通用 | `0x124c75b95c21af6d4db8bd49be9bdd6b6674bf6b` | 同 address 收 USDC / USDT-ERC20 / ENA / BNB / MATIC / AVAX |
+| SOL | Solana | `EGf2jA4HoMmGhbUT3omhokpqKasiMTtzemSwQM5bNpF1` | base58 |
+
+> ⚠️ 鏈上交易不可逆，發送前務必確認鏈別 + address 頭尾 6 碼。
+
+---
+
+## 📋 商業模式 & 已知限制
+
+| 項目 | 狀態 |
+|------|------|
+| 授權 | [MIT](./LICENSE) |
+| 收費方案 | ❌ 無（不收費、不賣授權、不訂閱） |
+| 商業憑證 | ❌ 不買（Apple Developer ID / Windows EV / macOS notarization） |
+| 廣告 / 追蹤 | ❌ 無（完全離線、隱私優先） |
+| 收入來源 | 純粹 donate（見上節） |
+
+### 為什麼不買憑證？
+
+個人 side project，**沒有商業營收**。年費 USD 99-500 的憑證對個人開發者負擔過重。
+本專案採「**開源透明 + 公開 audit**」原則 — 任何人都可 review source code，提供的安全保證
+比 code signing 更強（code signing 只保證「這個 binary 沒被竄改」，不保證「作者沒寫惡意邏輯」）。
+
+### ⚠️ 首次安裝警告（預期內現象）
+
+由於沒買 code signing 憑證，安裝時 OS 會顯示「未識別的發布者」警告。
+**這不是病毒 / 惡意軟體**，是「沒買 EV 憑證」的預期成本。
+
+**Windows SmartScreen**：
+
+> "Windows protected your PC" / SmartScreen prevented an unrecognized app from starting
+
+**繞過**：點 "More info" → "Run anyway"。隨下載次數累積，警告強度會逐漸降低。
+
+**macOS Gatekeeper**：
+
+> "Speak2T cannot be opened because it is from an unidentified developer"
+
+**繞過**：
+- **GUI**：系統設定 → 隱私與安全性 → 往下捲 → 看到 Speak2T 警告 → "Open Anyway"
+- **terminal**：`xattr -dr com.apple.quarantine /Applications/Speak2T.app`
+
+### 自動更新
+
+從 **v0.1.1** 開始，App 會透過 [electron-updater](https://www.electron.build/auto-update)
+自動從 GitHub Releases 拉新版。**v0.1.0 不會自動檢查更新**（首次發布，沒有 newer version）。
 
 ## 🤝 貢獻
 

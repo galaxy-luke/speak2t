@@ -20,7 +20,7 @@ export function createMainWindow(): BrowserWindow {
     minWidth: 720,
     minHeight: 480,
     show: false,
-    title: 'Speak2T 設定',
+    title: '聲打 / Speak2T 設定',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -96,7 +96,7 @@ export function createIndicatorWindow(): BrowserWindow {
     focusable: false,
     show: false,
     hasShadow: false,
-    title: 'Speak2T Indicator',
+    title: '聲打 / Speak2T Indicator',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,

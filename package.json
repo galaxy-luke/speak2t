@@ -1,7 +1,7 @@
 {
   "name": "speak2t",
   "version": "0.1.0",
-  "description": "Desktop voice-to-text input tool for Traditional Chinese (Taiwan). Local processing, privacy-first.",
+  "description": "聲打 / Speak2T 為台灣繁中使用者打造的桌面語音輸入工具。按下全域快捷鍵 → 講話 → 文字自動注入當前焦點視窗。本機 ASR（sherpa-onnx 雙引擎），模型下載後無需網路。A free, open-source desktop voice-to-text tool for Traditional Chinese users in Taiwan.",
   "main": "dist/main/index.js",
   "author": "Luke",
   "license": "MIT",
@@ -59,7 +59,7 @@
   },
   "build": {
     "appId": "com.luke.speak2t",
-    "productName": "Speak2T",
+    "productName": "聲打 / Speak2T",
     "directories": {
       "output": "release",
       "buildResources": "assets"
@@ -103,7 +103,7 @@
       "category": "public.app-category.productivity",
       "artifactName": "Speak2T-${version}-${arch}.${ext>",
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "Speak2T 需要麥克風權限來接收您的語音並轉成文字"
+        "NSMicrophoneUsageDescription": "聲打 / Speak2T 需要麥克風權限來接收您的語音並轉成文字"
       }
     },
     "publish": {
