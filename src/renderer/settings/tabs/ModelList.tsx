@@ -1,15 +1,20 @@
 /**
- * ModelList 子元件（P2 Stage 2 + TOFU commit 6）
+ * ModelList 子元件（P2 Stage 2 + TOFU commit 6 + 刪除按鈕 commit 8）
  *
  * 顯示模型清單 + 下載 UI + 5 態校驗標籤：
- * - 已下載：✅ + 5 態校驗標籤 + 路徑 + 重新下載/重新校驗/清除 TOFU 按鈕
+ * - 已下載：✅ + 5 態校驗標籤 + 路徑 + 重新下載/刪除/重新校驗/清除 TOFU 按鈕
  * - 未下載：下載按鈕
  * - 下載中：進度條 + 速度 + 取消按鈕
  * - 完成 / 失敗 / 取消：狀態訊息（5 秒自動消失）
  *
  * 給 AsrTab 內嵌。
+ *
+ * 重新下載流程（commit: 修 code=5）：
+ * 「重新下載」按鈕 = 先 onRemoveModel 刪除既有檔案 → 再 onDownload 重新下載
+ * 不再用 --force 或 code=5 hack
  */
 
+import { useState } from 'react';
 import type {
   ModelInfo,
   DownloadProgressPayload,
@@ -26,6 +31,8 @@ interface Props {
   onCancel: () => void;
   onVerify: (presetKey: string) => void;
   onRemoveTofu: (presetKey: string) => void;
+  /** 刪除已下載的模型（commit: 刪除模型按鈕 + 修 code=5） */
+  onRemoveModel: (presetKey: string) => void;
   loading: boolean;
 }
 
@@ -138,7 +145,7 @@ function VerificationBadge({
   }
 }
 
-function ModelItem({ model, status, verification, hasTofu, onDownload, onCancel, onVerify, onRemoveTofu }: {
+function ModelItem({ model, status, verification, hasTofu, onDownload, onCancel, onVerify, onRemoveTofu, onRemoveModel }: {
   model: ModelInfo;
   status: DownloadStatus;
   verification: VerificationResultPayload | undefined;
@@ -147,6 +154,8 @@ function ModelItem({ model, status, verification, hasTofu, onDownload, onCancel,
   onCancel: () => void;
   onVerify: (k: string) => void;
   onRemoveTofu: (k: string) => void;
+  /** 刪除已下載的模型（commit: 刪除模型按鈕 + 修 code=5） */
+  onRemoveModel: (k: string) => void;
 }) {
   const isDownloading = status.kind === 'downloading' && status.preset === model.key;
   const isJustCompleted = status.kind === 'completed' && status.preset === model.key;
@@ -154,6 +163,23 @@ function ModelItem({ model, status, verification, hasTofu, onDownload, onCancel,
   const isJustCancelled = status.kind === 'cancelled' && status.preset === model.key;
   const isJustVerified = status.kind === 'verified' && status.preset === model.key;
   const isActive = isDownloading || isJustCompleted || isJustErrored || isJustCancelled || isJustVerified;
+  const [isRedownloading, setIsRedownloading] = useState(false);
+
+  /**
+   * 「重新下載」按鈕流程（commit: 修 code=5）：
+   * 先刪除既有檔案（清掉 TOFU baseline + 目錄）→ 再下載全新的
+   * 確保每次按都是乾淨的全新下載，不靠 --force hack
+   */
+  const handleRedownload = async (key: string) => {
+    if (isRedownloading) return;
+    setIsRedownloading(true);
+    try {
+      await onRemoveModel(key);
+      await onDownload(key);
+    } finally {
+      setIsRedownloading(false);
+    }
+  };
 
   return (
     <div className={`model-item ${isActive ? 'active' : ''}`}>
@@ -192,10 +218,11 @@ function ModelItem({ model, status, verification, hasTofu, onDownload, onCancel,
           ) : model.installed ? (
             <button
               className="btn btn-cancel"
-              onClick={() => onDownload(model.key)}
-              disabled={isActive}
+              onClick={() => void handleRedownload(model.key)}
+              disabled={isActive || isRedownloading}
+              title="先刪除既有檔案再重新下載"
             >
-              重新下載
+              {isRedownloading ? '準備中…' : '重新下載'}
             </button>
           ) : (
             <button
@@ -234,6 +261,23 @@ function ModelItem({ model, status, verification, hasTofu, onDownload, onCancel,
               🗑 清除 TOFU
             </button>
           )}
+          {/* 刪除整個模型目錄（commit: 刪除模型按鈕） */}
+          <button
+            className="btn btn-tiny btn-tiny-danger"
+            onClick={() => {
+              if (
+                confirm(
+                  `確定要刪除「${model.name}」？\n刪除後需要重新下載才能使用。\n\n模型路徑：${model.path}`,
+                )
+              ) {
+                onRemoveModel(model.key);
+              }
+            }}
+            disabled={isActive}
+            title="刪除模型目錄（含 TOFU baseline）"
+          >
+            🗑 刪除模型
+          </button>
         </div>
       )}
 
@@ -326,6 +370,7 @@ export function ModelList({
   onCancel,
   onVerify,
   onRemoveTofu,
+  onRemoveModel,
   loading,
 }: Props) {
   if (loading && models.length === 0) {
@@ -348,6 +393,7 @@ export function ModelList({
           onCancel={onCancel}
           onVerify={onVerify}
           onRemoveTofu={onRemoveTofu}
+          onRemoveModel={onRemoveModel}
         />
       ))}
     </div>

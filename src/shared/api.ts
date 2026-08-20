@@ -94,6 +94,8 @@ export interface Speak2tApi {
   verifyAllModels: () => Promise<VerificationResultPayload[]>;
   /** 清除某個 preset 的 TOFU baseline */
   removeTofuBaseline: (presetKey: string) => Promise<void>;
+  /** 刪除已下載的模型（遞迴刪目錄 + 移除 TOFU baseline）— commit: 刪除模型 + 修 code=5 */
+  removeModel: (presetKey: string) => Promise<void>;
 
   /** TOFU baseline 已建立 */
   onTofuEstablished: (callback: (data: TofuEstablishedPayload) => void) => () => void;

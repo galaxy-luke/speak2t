@@ -182,6 +182,7 @@ const api: Speak2tApi = {
     ipcRenderer.invoke(IPC.VERIFY_ALL_MODELS) as Promise<VerificationResultPayload[]>,
   removeTofuBaseline: (presetKey) =>
     ipcRenderer.invoke(IPC.REMOVE_TOFU, presetKey) as Promise<void>,
+  removeModel: (presetKey) => ipcRenderer.invoke(IPC.REMOVE_MODEL, presetKey) as Promise<void>,
 
   onTofuEstablished: (callback) => {
     const listener = (_event: unknown, data: TofuEstablishedPayload) => callback(data);

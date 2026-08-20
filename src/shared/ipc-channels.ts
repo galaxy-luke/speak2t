@@ -87,6 +87,8 @@ export const IPC = {
   VERIFY_ALL_MODELS: 'invoke:model:verify-all',
   /** 清除某個 preset 的 TOFU baseline */
   REMOVE_TOFU: 'invoke:model:remove-tofu',
+  /** 刪除已下載的模型（遞迴刪目錄 + 移除 TOFU baseline） */
+  REMOVE_MODEL: 'invoke:model:remove',
 
   // TOFU 事件（main → renderer 廣播）
   /** TOFU baseline 已建立 */

@@ -20,7 +20,7 @@
 
 import { EventEmitter } from 'node:events';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, statSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { app } from 'electron';
 import { appState } from '../../main/app-state';
@@ -536,6 +536,41 @@ export class ModelDownloader extends EventEmitter {
     appState.updateSettings({ tofuBaselines: nextBaselines });
     console.log(`[downloader] TOFU baseline 已移除：${preset}`);
     this.emit('tofuRemoved', { preset, timestamp: Date.now() });
+  }
+
+  /**
+   * 刪除已下載的模型（commit: 刪除模型按鈕 + 修 code=5）
+   * - 遞迴刪除模型目錄
+   * - 同步移除 TOFU baseline（避免殘留 baseline 對著不存在的目錄 mismatch）
+   *
+   * 注意：下載中不允許呼叫（會跟正在解壓的 child process 衝突）。
+   */
+  removeModel(preset: string): void {
+    if (this.isDownloading() && this.currentPreset === preset) {
+      throw new Error(`正在下載 ${preset}，無法刪除`);
+    }
+    const modelInfo = MODELS.find((m) => m.key === preset);
+    if (!modelInfo) {
+      throw new Error(`未知模型 key：${preset}`);
+    }
+    // 用跟 listModels 相同的路徑邏輯（customRoot 也要看）
+    const customRoot = this.getCustomRootDir();
+    const defaultRoot = join(app.getPath('userData'), 'models');
+    const modelPath = resolveModelPath(customRoot, defaultRoot, modelInfo.preset);
+
+    if (!existsSync(modelPath)) {
+      console.log(`[downloader] removeModel: 目錄不存在，跳過 ${modelPath}`);
+    } else {
+      try {
+        rmSync(modelPath, { recursive: true, force: true });
+        console.log(`[downloader] 已刪除模型目錄：${modelPath}`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(`刪除模型目錄失敗：${modelPath} (${msg})`);
+      }
+    }
+    // 同步移除 TOFU baseline（避免 stale baseline）
+    this.removeTofu(preset);
   }
 
   /**

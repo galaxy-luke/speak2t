@@ -931,9 +931,11 @@ async function main() {
   // 檢查是否已存在
   if (existsSync(targetDir)) {
     if (JSON_MODE && !FORCE) {
-      // UI 收到 exists 事件可決定要不要重下（user 按「重新下載」會帶 --force）
+      // UI 收到 exists 事件可決定要不要重下
+      // emit exists 後讓 process 自然 return（exit 0）— 避免 downlodaer 把 code≠0 當 error
+      // 「重新下載」流程改在 UI 端：先 removeModel() → 再 startDownload()
       emit({ event: 'exists', path: targetDir });
-      process.exit(5);
+      return;
     } else if (!JSON_MODE) {
       console.log(`⚠️  目標目錄已存在：${targetDir}`);
       if (!FORCE) {

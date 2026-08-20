@@ -66,6 +66,8 @@ export interface UseDownloadStateReturn {
   verifyAll: () => Promise<void>;
   /** 清除某個 preset 的 TOFU baseline */
   removeTofu: (presetKey: string) => Promise<void>;
+  /** 刪除已下載的模型（commit: 刪除模型按鈕 + 修 code=5） */
+  removeModel: (presetKey: string) => Promise<void>;
   loading: boolean;
   error: string | null;
 }
@@ -255,6 +257,18 @@ export function useDownloadState(): UseDownloadStateReturn {
     }
   }, []);
 
+  const removeModel = useCallback(async (presetKey: string) => {
+    setError(null);
+    try {
+      await window.speak2t.removeModel(presetKey);
+      // 重新整理模型清單（installed 變 false）
+      void refresh();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`removeModel failed: ${msg}`);
+    }
+  }, [refresh]);
+
   return {
     models,
     status,
@@ -266,6 +280,7 @@ export function useDownloadState(): UseDownloadStateReturn {
     verifyModel,
     verifyAll,
     removeTofu,
+    removeModel,
     loading,
     error,
   };

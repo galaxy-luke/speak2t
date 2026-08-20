@@ -126,6 +126,7 @@ export function AsrTab({ draft, onChange }: Props) {
           onCancel={download.cancelDownload}
           onVerify={download.verifyModel}
           onRemoveTofu={download.removeTofu}
+          onRemoveModel={download.removeModel}
           loading={download.loading}
         />
         <div className="download-actions">

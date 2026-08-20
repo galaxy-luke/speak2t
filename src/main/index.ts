@@ -352,6 +352,11 @@ function registerIpcHandlers(): void {
     modelDownloader.removeTofu(presetKey);
   });
 
+  // 刪除已下載模型（commit: 刪除模型按鈕 + 修 code=5）
+  ipcMain.handle(IPC.REMOVE_MODEL, (_event, presetKey: string) => {
+    modelDownloader.removeModel(presetKey);
+  });
+
   // ===== P4 Stage 2：自動更新 IPC =====
 
   // 觸發檢查
