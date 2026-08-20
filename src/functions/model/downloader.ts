@@ -8,6 +8,7 @@
  * - Singleton（一次只允許一個下載，避免吃滿資源）
  * - 透過 `process.execPath` + `scripts/download-model.mjs` 啟動（path 安全）
  * - 取消：發 SIGTERM 給 child process，給 3 秒 grace，否則 SIGKILL
+ * - TOFU：下載完成時若 preset 沒官方 SHA-256 baseline，自動算 TOFU 存進 settings
  */
 
 import { EventEmitter } from 'node:events';
@@ -15,6 +16,9 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { app } from 'electron';
+import { appState } from '../../main/app-state';
+import { establishTofu, type VerificationResult } from './verifier';
+import type { TofuBaseline } from '../../shared/types';
 
 /** 模型基本資訊（UI 顯示用） */
 export interface ModelInfo {
@@ -81,6 +85,27 @@ export interface DownloadVerifiedEvent {
   skipped: boolean;
 }
 
+/** TOFU 自我校驗基線已建立事件（commit 3 新增） */
+export interface TofuEstablishedEvent {
+  preset: string;
+  /** 新建的 TOFU baseline */
+  baseline: TofuBaseline;
+  timestamp: number;
+}
+
+/** TOFU 自我校驗基線已移除事件（給 UI 同步用） */
+export interface TofuRemovedEvent {
+  preset: string;
+  timestamp: number;
+}
+
+/** 校驗結果事件（給 UI 顯示 5 態標籤用） */
+export interface VerificationResultEvent {
+  preset: string;
+  result: VerificationResult;
+  timestamp: number;
+}
+
 export interface ModelDownloaderEvents {
   start: (e: { preset: string; total: number }) => void;
   progress: (e: DownloadProgressEvent) => void;
@@ -90,6 +115,12 @@ export interface ModelDownloaderEvents {
   exists: (e: DownloadExistsEvent) => void;
   cancelled: (e: DownloadCancelledEvent) => void;
   log: (e: { preset: string; message: string }) => void;
+  /** TOFU baseline 已建立 */
+  tofuEstablished: (e: TofuEstablishedEvent) => void;
+  /** TOFU baseline 已移除 */
+  tofuRemoved: (e: TofuRemovedEvent) => void;
+  /** 校驗結果（給 UI 顯示 5 態標籤用） */
+  verificationResult: (e: VerificationResultEvent) => void;
 }
 
 export declare interface ModelDownloader {
@@ -352,10 +383,14 @@ export class ModelDownloader extends EventEmitter {
           expected: (e.expected as string | null) ?? null,
           skipped: (e.skipped as boolean) ?? true,
         } as DownloadVerifiedEvent);
+        // TOFU commit 3：若跳過比對（無官方 baseline）→ 自動建 TOFU
+        if ((e.skipped as boolean) ?? true) {
+          void this.establishAndSaveTofu(preset);
+        }
         break;
 
       case 'verified':
-        // 校驗通過（actual === expected）
+        // 校驗通過（actual === expected）— 有官方 baseline 對得起來，不需建 TOFU
         this.emit('verified', {
           preset,
           algorithm: 'sha256',
@@ -407,6 +442,75 @@ export class ModelDownloader extends EventEmitter {
   private resolveScriptPath(): string {
     // 簡化：永遠從 process.cwd() 找（dev + packaged 都成立）
     return join(process.cwd(), 'scripts', 'download-model.mjs');
+  }
+
+  // ===== TOFU 自我校驗（commit 3）=====
+
+  /**
+   * 自動建立 TOFU baseline 並存進 settings
+   * 觸發時機：下載完成且 preset 沒有官方 SHA-256 baseline 時
+   *
+   * 注意：此時模型目錄已經完整解壓，遞迴算所有檔案 SHA-256
+   * 對於 Luigi 4 檔約需 5-10s（串流讀，無爆記憶體）
+   */
+  private async establishAndSaveTofu(preset: string): Promise<void> {
+    try {
+      const modelPath = join(app.getPath('userData'), 'models', preset);
+      if (!existsSync(modelPath)) {
+        console.warn(`[downloader] TOFU 建立失敗：模型目錄不存在 ${modelPath}`);
+        return;
+      }
+      const baseline = await establishTofu(modelPath, 'auto');
+      // 寫進 settings（shallow merge，注意要保留既有其他 preset 的 baseline）
+      const current = appState.getSettings();
+      const nextBaselines = {
+        ...current.tofuBaselines,
+        [preset]: baseline,
+      } as typeof current.tofuBaselines;
+      appState.updateSettings({ tofuBaselines: nextBaselines });
+      console.log(`[downloader] TOFU baseline 已建立：${preset} sha256=${baseline.sha256.slice(0, 16)}…`);
+      this.emit('tofuEstablished', { preset, baseline, timestamp: Date.now() });
+    } catch (err) {
+      console.warn(
+        `[downloader] TOFU 建立失敗：${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  /**
+   * 移除 TOFU baseline（UI 提供「清除 TOFU」按鈕時呼叫）
+   * 移除後下次重算會走 no-baseline → mismatch（如果還有檔案的話）
+   */
+  removeTofu(preset: string): void {
+    const current = appState.getSettings();
+    if (!(preset in current.tofuBaselines)) {
+      return;
+    }
+    const nextBaselines = { ...current.tofuBaselines } as typeof current.tofuBaselines;
+    delete (nextBaselines as Record<string, TofuBaseline>)[preset];
+    appState.updateSettings({ tofuBaselines: nextBaselines });
+    console.log(`[downloader] TOFU baseline 已移除：${preset}`);
+    this.emit('tofuRemoved', { preset, timestamp: Date.now() });
+  }
+
+  /**
+   * 手動觸發校驗（給 UI「重新校驗」按鈕呼叫）
+   * 對所有已下載模型跑 verify，回傳結果 event
+   */
+  async verifyAll(): Promise<VerificationResult[]> {
+    const { verifyModel } = await import('./verifier');
+    const results: VerificationResult[] = [];
+    const tofuMap = appState.getSettings().tofuBaselines as Record<string, TofuBaseline>;
+    for (const m of this.listModels()) {
+      if (!m.installed) continue;
+      const result = await verifyModel(m.path, {
+        officialSha256: m.sha256,
+        tofuBaseline: tofuMap[m.key] ?? null,
+      });
+      results.push(result);
+      this.emit('verificationResult', { preset: m.key, result, timestamp: Date.now() });
+    }
+    return results;
   }
 }
 
