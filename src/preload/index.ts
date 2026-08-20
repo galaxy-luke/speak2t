@@ -39,6 +39,20 @@ const api: Speak2tApi = {
     ipcRenderer.send(IPC.AUDIO_CHUNK, { samples, sampleRate });
   },
 
+  /**
+   * 通知 main 開始錄音（啟動 ASR 串流 + audio ingest）
+   */
+  startRecord: () => {
+    ipcRenderer.send(IPC.START_RECORD);
+  },
+
+  /**
+   * 通知 main 停止錄音（結束 ASR 串流 + 寫 wav 檔）
+   */
+  stopRecord: () => {
+    ipcRenderer.send(IPC.STOP_RECORD);
+  },
+
   // ===== 事件訂閱（回傳 unsubscribe 函式） =====
 
   // P0 既有

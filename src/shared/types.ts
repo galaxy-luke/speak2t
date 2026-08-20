@@ -17,8 +17,15 @@ export type IndicatorPosition = 'bottom-center' | 'follow-cursor';
 /** ASR 引擎（D-B 雙引擎） */
 export type AsrEngineType = 'sherpa-onnx' | 'whisper-cpp';
 
-/** 預設 ASR 模型識別名（D-5） */
-export type AsrModelPreset = 'sherpa-streaming-zh-en' | 'whisper-small';
+/**
+ * 預設 ASR 模型識別名（D-5）
+ *
+ * 注意：值就是模型解壓後的目錄名（GitHub release tarball 解出來的目錄名），
+ * 這樣 AsrManager 直接拿這個值當 dirName，不用 mapping。
+ */
+export type AsrModelPreset =
+  | 'sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20'
+  | 'whisper-small';
 
 /** 使用者設定 */
 export interface AppSettings {
@@ -49,7 +56,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
   // P1
   asrEngine: 'sherpa-onnx', // D-B 預設 streaming
-  asrModelPreset: 'sherpa-streaming-zh-en', // D-5
+  asrModelPreset: 'sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20', // D-5
   audioSampleRate: 16000,
   customModelPath: '',
 };

@@ -29,6 +29,11 @@ export const IPC = {
   /** 推送 PCM audio chunk。Float32Array 走 transferable 零拷貝。 */
   AUDIO_CHUNK: 'send:audio:chunk',
 
+  /** 開始錄音（renderer → main 通知 start ASR + ingest） */
+  START_RECORD: 'send:record:start',
+  /** 停止錄音（renderer → main 通知 stop ASR + ingest） */
+  STOP_RECORD: 'send:record:stop',
+
   // asr（main → renderer 廣播）
   /** ASR partial result（邊說邊出文字） */
   ASR_PARTIAL: 'broadcast:asr:partial',

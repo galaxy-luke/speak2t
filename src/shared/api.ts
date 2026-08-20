@@ -26,6 +26,16 @@ export interface Speak2tApi {
    */
   sendAudioChunk: (samples: Float32Array, sampleRate: number) => void;
 
+  /**
+   * 通知 main 開始錄音（啟動 ASR 串流 + audio ingest）
+   */
+  startRecord: () => void;
+
+  /**
+   * 通知 main 停止錄音（結束 ASR 串流 + 寫 wav 檔）
+   */
+  stopRecord: () => void;
+
   // ===== 事件訂閱 =====
 
   /** 熱鍵觸發（P0 通用） */

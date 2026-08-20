@@ -18,6 +18,7 @@ import { createMainWindow, showMainWindow } from './windows';
 import { createTray, destroyTray } from './tray';
 import { hotkeyManager } from '../functions/hotkey/manager';
 import { audioIngest } from '../functions/audio/ingest';
+import { AsrManager } from '../functions/asr/manager';
 import { lifecycle } from './lifecycle';
 import { DEFAULT_HOTKEY } from '../shared/constants';
 import type { AppSettings } from '../shared/types';
@@ -31,7 +32,7 @@ if (!gotTheLock) {
     showMainWindow();
   });
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     // 1. 建立視窗與系統匣
     createMainWindow();
     createTray();
@@ -45,10 +46,13 @@ if (!gotTheLock) {
     // 3. 音訊 ingest wiring
     wireAudioIngest();
 
-    // 4. IPC handlers
+    // 4. ASR manager 初始化（async，模型未下載時會失敗但不阻擋 app）
+    await initAsrManager();
+
+    // 5. IPC handlers
     registerIpcHandlers();
 
-    // 5. macOS 特殊處理（雖然 P0 是 Windows 優先）
+    // 6. macOS 特殊處理（雖然 P0 是 Windows 優先）
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         createMainWindow();
@@ -70,12 +74,17 @@ if (!gotTheLock) {
     lifecycle.isQuitting = true;
     hotkeyManager.unregister();
     audioIngest.stop();
+    asrManager?.dispose();
     destroyTray();
   });
 }
 
+/** AsrManager singleton（lazy init，因為 init 可能因模型不存在失敗） */
+let asrManager: AsrManager | null = null;
+
 /**
  * 連接 audio.ingest 的 level event 到 indicator renderer（broadcast）
+ * 連接 audio.ingest chunk event 到 asrManager.feed()
  * 階段 4 會接真正的 indicator window；現在先 broadcast 給所有 renderer
  */
 function wireAudioIngest(): void {
@@ -89,12 +98,32 @@ function wireAudioIngest(): void {
   });
 
   audioIngest.on('chunk', (samples, sampleRate) => {
-    // 階段 2 會把這個 listener 接到 ASR engine
-    // 階段 1 暫時只 log
-    if (process.env.SPEAK2T_DEBUG_AUDIO === '1') {
-      console.log(`[main] audio chunk: ${samples.length} samples @ ${sampleRate}Hz`);
+    // 接到 ASR engine
+    if (asrManager?.initialized) {
+      asrManager.feed(samples, sampleRate);
     }
   });
+}
+
+/**
+ * 初始化 ASR manager（模型未下載時會失敗，但不阻擋 app 啟動）
+ */
+async function initAsrManager(): Promise<void> {
+  const settings = appState.getSettings();
+  asrManager = new AsrManager(settings);
+
+  asrManager.on('error', (err) => {
+    console.error('[main] asr manager error:', err);
+  });
+
+  try {
+    await asrManager.init();
+    console.log(`[main] asr manager ready: engine=${settings.asrEngine}`);
+  } catch (err) {
+    // 初始化失敗（最常見：模型檔不存在）
+    console.warn(`[main] asr manager init failed: ${err instanceof Error ? err.message : String(err)}`);
+    console.warn('[main] ASR 功能暫時停用，請用 npm run download-model 下載模型後重啟 app');
+  }
 }
 
 function registerIpcHandlers(): void {
@@ -123,6 +152,42 @@ function registerIpcHandlers(): void {
   // Audio chunk 接收
   ipcMain.on(IPC.AUDIO_CHUNK, (_event, payload: { samples: Float32Array; sampleRate: number }) => {
     audioIngest.feed(payload.samples, payload.sampleRate);
+  });
+
+  // 開始錄音（renderer 通知）
+  ipcMain.on(IPC.START_RECORD, () => {
+    console.log('[main] START_RECORD received');
+    if (!audioIngest.recording) {
+      audioIngest.start();
+    }
+    if (asrManager?.initialized) {
+      try {
+        asrManager.start();
+        appState.setStatus('recording');
+      } catch (err) {
+        console.error('[main] asr start failed:', err);
+      }
+    } else {
+      console.warn('[main] asr manager not initialized, 純錄音模式');
+    }
+  });
+
+  // 停止錄音（renderer 通知）
+  ipcMain.on(IPC.STOP_RECORD, async () => {
+    console.log('[main] STOP_RECORD received');
+    if (asrManager?.initialized) {
+      appState.setStatus('processing');
+      try {
+        const result = await asrManager.stop();
+        console.log(`[main] ASR result: "${result.text}" (${result.durationMs}ms)`);
+      } catch (err) {
+        console.error('[main] asr stop failed:', err);
+      }
+    }
+    if (audioIngest.recording) {
+      audioIngest.stop();
+    }
+    appState.setStatus('idle');
   });
 }
 

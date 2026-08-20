@@ -1,16 +1,18 @@
 /**
- * P0 Hello-world 主頁面 + P1 stage 1 mic 擷取測試
+ * P0 + P1 stage 1 + P1 stage 2 主頁面
  *
  * P0：
- * - 顯示目前設定（從 main 讀取）
- * - 顯示「按 Ctrl+Shift+Space 測試」說明
- * - 監聽熱鍵觸發事件，顯示「收到熱鍵」toast
+ * - 顯示目前設定
+ * - 監聽熱鍵觸發事件
  *
  * P1 stage 1：
  * - 「開始/停止錄音」按鈕，連接 getUserMedia + AudioWorklet
  * - 顯示 audio chunk 計數 + 即時音量條
- * - 驗證 IPC 從 renderer → main 通
- * - 階段 4 會把按鈕邏輯搬到熱鍵 toggle
+ *
+ * P1 stage 2：
+ * - 訂閱 ASR partial / final / error 事件
+ * - 顯示辨識中的 partial 文字 + 最終結果
+ * - 整合 startRecord / stopRecord IPC（main 端會啟動 ASR 串流）
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -28,6 +30,12 @@ export function App() {
   const [chunkCount, setChunkCount] = useState(0);
   const [micError, setMicError] = useState<string | null>(null);
   const [level, setLevel] = useState(0);
+
+  // P1 stage 2: ASR 狀態
+  const [asrPartial, setAsrPartial] = useState('');
+  const [asrFinal, setAsrFinal] = useState('');
+  const [asrHistory, setAsrHistory] = useState<string[]>([]);
+  const [asrError, setAsrError] = useState<string | null>(null);
 
   // 音訊相關 ref（不觸發 re-render）
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -53,10 +61,35 @@ export function App() {
       setLevel(data.level);
     });
 
+    // P1 stage 2：ASR 事件
+    const offAsrPartial = window.speak2t.onAsrPartial((data) => {
+      setAsrPartial(data.text);
+      if (data.isEndpoint && data.text) {
+        // 端點：append 到 final（不覆蓋舊的）
+        setAsrFinal((prev) => (prev ? `${prev} ${data.text}` : data.text));
+      }
+    });
+
+    const offAsrFinal = window.speak2t.onAsrFinal((data) => {
+      setAsrFinal(data.text);
+      setAsrPartial('');
+      if (data.text) {
+        setAsrHistory((prev) => [...prev, `[${new Date(data.timestamp).toLocaleTimeString()}] ${data.text}`]);
+      }
+    });
+
+    const offAsrError = window.speak2t.onAsrError((data) => {
+      setAsrError(`${data.code}: ${data.message}`);
+      setTimeout(() => setAsrError(null), 5000);
+    });
+
     return () => {
       offHotkey();
       offStatus();
       offLevel();
+      offAsrPartial();
+      offAsrFinal();
+      offAsrError();
     };
   }, []);
 
@@ -71,6 +104,9 @@ export function App() {
   async function startMic() {
     if (isRecording) return;
     setMicError(null);
+    setAsrPartial('');
+    setAsrFinal('');
+    setAsrError(null);
 
     try {
       // 1. 抓麥克風
@@ -111,9 +147,12 @@ export function App() {
         setChunkCount((c) => c + 1);
       };
 
+      // 7. 通知 main 開始 ASR 串流
+      window.speak2t.startRecord();
+
       setIsRecording(true);
       setChunkCount(0);
-      console.log('[renderer] mic started');
+      console.log('[renderer] mic started + ASR stream started');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setMicError(`無法啟動麥克風：${msg}`);
@@ -144,15 +183,17 @@ export function App() {
 
   function stopMic() {
     stopMicInternal();
+    // 通知 main 停止 ASR 串流
+    window.speak2t.stopRecord();
     setIsRecording(false);
     setLevel(0);
-    console.log('[renderer] mic stopped');
+    console.log('[renderer] mic stopped + ASR stream stopped');
   }
 
   return (
     <div className="container">
       <h1>🎙️ Speak2T</h1>
-      <p className="subtitle">台灣繁體中文語音輸入工具 · P0 雛形 + P1 stage 1 mic 測試</p>
+      <p className="subtitle">台灣繁體中文語音輸入工具 · P0 + P1 stage 1+2</p>
 
       <section className="card">
         <h2>目前狀態</h2>
@@ -198,7 +239,6 @@ export function App() {
 
       <section className="card">
         <h2>P0 驗證</h2>
-        <p>請按全域熱鍵測試：</p>
         <div className="hotkey-test">
           <kbd>{settings?.hotkey ?? '...'}</kbd>
           <span className="count">觸發次數：{hotkeyCount}</span>
@@ -206,16 +246,16 @@ export function App() {
       </section>
 
       <section className="card">
-        <h2>P1 Stage 1 — Mic 擷取測試</h2>
-        <p>點按鈕啟動麥克風，講話後看 main 端是否收到 audio chunks：</p>
+        <h2>P1 Stage 1+2 — 語音輸入 + ASR</h2>
+        <p>點按鈕啟動麥克風 + ASR 辨識，講話後看下方結果：</p>
         <div className="mic-test">
           {isRecording ? (
             <button className="btn btn-stop" onClick={stopMic}>
-              ⏹ 停止錄音
+              ⏹ 停止
             </button>
           ) : (
             <button className="btn btn-start" onClick={startMic}>
-              🎙️ 開始錄音
+              🎙️ 開始
             </button>
           )}
           <span className="count">IPC chunks: {chunkCount}</span>
@@ -226,10 +266,37 @@ export function App() {
           <div className="level-fill" style={{ width: `${Math.min(level * 100, 100)}%` }} />
         </div>
 
+        {/* ASR Partial（邊說邊出） */}
+        {asrPartial && (
+          <div className="asr-partial">
+            <span className="label">partial:</span> {asrPartial}
+          </div>
+        )}
+
+        {/* ASR Final（一句結束） */}
+        {asrFinal && (
+          <div className="asr-final">
+            <span className="label">final:</span> {asrFinal}
+          </div>
+        )}
+
+        {asrError && <p className="error">⚠️ ASR 錯誤：{asrError}</p>}
         {micError && <p className="error">⚠️ {micError}</p>}
 
+        {/* 歷史 */}
+        {asrHistory.length > 0 && (
+          <details className="asr-history">
+            <summary>歷史辨識結果（{asrHistory.length}）</summary>
+            <ul>
+              {asrHistory.map((entry, i) => (
+                <li key={i}>{entry}</li>
+              ))}
+            </ul>
+          </details>
+        )}
+
         <p className="hint">
-          啟用後請允許麥克風權限。設定環境變數 <code>SPEAK2T_DEBUG_WAV=1</code> 可在 userData/debug 寫 wav 檔。
+          啟用後請允許麥克風權限。需要先下載 ASR 模型（<code>npm run download-model sherpa-zh-en</code>）才有辨識結果。
         </p>
       </section>
 
