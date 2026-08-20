@@ -1,5 +1,102 @@
 # Changelog
 
+## [P4] - 2026-08-20
+
+### Highlights
+
+Speak2T 進入 P4 階段，從「source 跑」變成「可發布的桌面 App」：  
+**Stage 1 產出 NSIS installer 121MB**（`release/Speak2T-Setup-0.1.0.exe`），含 electron 43 + asar + sherpa-onnx + whisper native binaries。  
+**Stage 2 整合 electron-updater**，app 啟動時從 GitHub Releases 檢查更新。  
+**Stage 3 出 macOS 文檔**（無 Mac 環境實測）。
+
+### Added
+
+#### Stage 1 — Windows 打包
+- 4 個 icon assets：
+  - `icon.png`：512x512 source（image_synthesize 生成）
+  - `icon-square.png`：512x512 標準化（給 Mac 通用）
+  - `icon.ico`：多尺寸 NSIS 用（16/32/48/64/128/256，370KB）
+  - `tray-icon.png`：256x256 系統匣用（21KB）
+- `scripts/build-icons.mjs`：Jimp + png-to-ico 自動轉檔
+  - 自動偵測 PNG/JPEG（image_synthesize 給的是 JPEG 但副檔名是 png）
+  - 統一 512x512 + 多尺寸 ICO
+- `package.json` build config 完整化：
+  - `directories.buildResources: "assets"`
+  - `extraResources: icon-square.png`
+  - `win.artifactName: Speak2T-Setup-${version}.${ext}`
+  - `mac.extendInfo.NSMicrophoneUsageDescription`（macOS 14+ 強制）
+  - `publish.provider: "github"` owner=galaxy-luke repo=speak2t
+- 新增 scripts：`build:icons` / `build:win:dir` / `build:mac` 系列
+- `src/main/tray.ts`：用 `assets/tray-icon.png` 取代 1x1 透明 placeholder
+
+#### Stage 2 — 自動更新
+- `src/functions/update/manager.ts`：UpdateManager 類別
+  - 包裝 electron-updater，EventEmitter 對外廣播
+  - 7 個事件：devMode / checking / upToDate / updateAvailable /
+    downloadProgress / updateDownloaded / error
+  - 單例 `initUpdateManager()` + `getUpdateManager()`
+  - dev 模式（`app.isPackaged=false`）→ emit devMode 不檢查
+- 8 個新 IPC channel：CHECK_UPDATE / APPLY_UPDATE / UPDATE_*
+- 5 個 payload type + preload 暴露 7 個事件訂閱
+- main `wireUpdateManager()` 廣播事件給所有 renderer
+- `UpdateChecker` 子元件（AdvancedTab 內嵌）：
+  - 顯示當前版本 + 6 種狀態 UI
+  - 「檢查更新」+「重啟並安裝」按鈕
+  - 進度條（autoDownload=true 自動下載）
+
+#### Stage 3 — macOS 文檔
+- `docs/MACOS-BUILD.md`（7.5 KB / 10 章節）：
+  - 環境需求 / Build 流程 / macOS 特定設定
+  - Gatekeeper 解決 / 完整發版 SOP / 故障排除
+  - 已知未處理（code signing / notarization）
+- `package.json` 新增 4 個 mac build scripts
+
+### Stats
+
+| 指標 | 數據 |
+|------|------|
+| Windows installer 大小 | 121 MB（NSIS，含 electron + asar + native） |
+| First build time | ~3 分鐘（含 electron 下載） |
+| 後續 rebuild | ~30 秒 |
+| Asset 大小 | icon.ico 370KB + tray 21KB |
+| Update flow | GitHub Releases → latest.yml / latest-mac.yml |
+
+### Commits
+
+1. `9047a58` feat: P4 stage 1 - Windows 打包 (NSIS installer 121MB)
+2. `4e6a927` feat: P4 stage 2 - 自動更新 (electron-updater + GitHub Releases + UI)
+3. `9dd44e5` feat: P4 stage 3 - macOS 文檔 + 設定準備
+
+### P4 User Setup Required
+
+發版流程（首次 v0.1.0 → v0.1.1）：
+
+```bash
+# 1. 改 package.json version: "0.1.1"
+# 2. tag + push
+git tag v0.1.1 && git push origin v0.1.1
+
+# 3. 設 GH_TOKEN（用於 auto publish）
+export GH_TOKEN=ghp_xxxxxxxxxxxx
+
+# 4. Build + auto publish
+npm run build:win
+npm run build:mac
+```
+
+5. 到 GitHub Releases 確認 artifacts 上傳
+6. 編輯 Release Notes
+
+### Known Limitations（P4 新增）
+
+- 沒 code signing：Windows 會有 SmartScreen 警告、mac 會有 Gatekeeper 警告
+- 沒 notarization：mac 13+ 首次開啟會被擋，需 `xattr -d com.apple.quarantine` 或花 $99/year 買 Apple Developer ID
+- 自動更新需發 v0.1.1+ 才會觸發（v0.1.0 沒更新可查）
+- universal mac binary 沒優化（~400MB）
+- icon 是 image_synthesize 自動生成（placeholder 風格），未來可換自製
+
+---
+
 ## [Tech Debt Cleanup] - 2026-08-20
 
 ### Highlights

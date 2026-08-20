@@ -1,6 +1,6 @@
 # Speak2T — 語音輸入轉文字工具 規劃書
 
-> **狀態**: v1.5 ✅（P0-P3 全部完成 + Tech debt cleanup；61 unit tests / 0 lint warnings）
+> **狀態**: v1.6 ✅（P0-P4 全部完成 + Tech debt；Windows NSIS installer 121MB + 自動更新 + macOS 文檔）
 > **建立日期**: 2026-08-19
 > **最後更新**: 2026-08-20
 > **目標平台**: Windows 11 優先（後續 macOS）
@@ -296,8 +296,8 @@ speak2t/
 
 ## 6. 開發階段計畫
 
-> **進度快照（2026-08-20）**：P0 ✅ P1 ✅ P2 ✅ P3 ✅ Tech debt cleanup ✅ 全部完成（HEAD = `58e8ec7`，領先 origin/main 20 commit）。
-> 詳細 P3 + Tech debt 變更見 [`CHANGELOG.md`](./CHANGELOG.md) 與 [`docs/plans/P3-plan.md`](./docs/plans/P3-plan.md)。
+> **進度快照（2026-08-20）**：P0 ✅ P1 ✅ P2 ✅ P3 ✅ Tech debt ✅ P4 ✅ 全部完成（HEAD = `9dd44e5`，領先 origin/main 23 commit）。
+> 詳細 P4 變更見 [`CHANGELOG.md`](./CHANGELOG.md) 與 [`docs/plans/P4-plan.md`](./docs/plans/P4-plan.md)。
 
 ### P0 — 雛形（核心閉環，3–5 天）
 
@@ -349,12 +349,13 @@ speak2t/
 
 ### P4 — 打包 + 自動更新 + 跨平台（3–5 天）
 
-- [ ] electron-builder 打包 Windows installer / portable
-- [ ] 開機自動啟動（`app.setLoginItemSettings`）
-- [ ] 自動更新（`electron-updater` 或省）
-- [ ] macOS build 測試（輔助使用權限、麥克風權限）
+- [x] electron-builder 打包 Windows NSIS installer（121MB）✅
+- [x] 開機自動啟動（`app.setLoginItemSettings`，P2 Stage 3 已做）✅
+- [x] 自動更新（electron-updater + GitHub Releases + UI）✅
+- [x] macOS 設定準備（NSMicrophoneUsageDescription）✅
+- [x] macOS build 文檔（`docs/MACOS-BUILD.md`，無 Mac 環境實測）✅
 
-**驗收**: 從官網下載安裝檔，雙擊安裝，開機自動啟動
+**驗收**: 從 GitHub Releases 下載 NSIS installer，雙擊安裝，開機可選自動啟動，UI 進階 tab 可檢查更新 ✅
 
 ### P5（可選）— 進階
 

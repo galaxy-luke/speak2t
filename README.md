@@ -6,8 +6,8 @@
 
 ## 📊 目前進度
 
-**P0 ✅ P1 ✅ P2 ✅ P3 ✅** — 繁中優化上線（標點後處理 + 引擎降級）  
-**P4 規劃中** — 打包 + 自動更新 + macOS
+**P0 ✅ P1 ✅ P2 ✅ P3 ✅ P4 ✅** — 完整發布就緒：Windows NSIS installer 121MB + 自動更新 + macOS 文檔  
+**P5（可選）** — 多段錄音歷史、客製化指示器主題、CLI 模式
 
 完整階段狀態見 [`SPEC.md`](./SPEC.md) 與 [`CHANGELOG.md`](./CHANGELOG.md)。
 
@@ -31,9 +31,11 @@
 
 ## 📦 安裝
 
-> P4 打包階段完成後會提供 release installer。目前從 source 跑。
+### 從 installer 安裝（推薦，v0.1.0+）
 
-從 source：
+從 [GitHub Releases](https://github.com/galaxy-luke/speak2t/releases) 下載 `Speak2T-Setup-0.1.0.exe`，雙擊安裝。
+
+### 從 source 跑
 
 ```powershell
 git clone https://github.com/galaxy-luke/speak2t.git
@@ -53,6 +55,10 @@ npm run download-model whisper-small       # 切到 Whisper 引擎
 ```
 
 模型放在 `%APPDATA%\speak2t\models\`，不進 git。
+
+### macOS
+
+見 [`docs/MACOS-BUILD.md`](./docs/MACOS-BUILD.md)（需要 Mac 環境 build DMG）。
 
 ## 🚀 開發
 
