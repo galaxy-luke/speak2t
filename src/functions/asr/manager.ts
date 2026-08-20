@@ -17,11 +17,19 @@ import type { AppSettings } from '../../shared/types';
 import type { AsrEngine, AsrConfig, AsrResult } from './engine';
 import { SherpaOnnxEngine } from './sherpa-onnx';
 import { WhisperCppEngine } from './whisper-cpp';
+import { postprocessWithReport } from '../postprocess';
+import { DEFAULT_RULES } from '../postprocess';
+import type { AsrPostprocessedPayload } from '../../shared/api';
 
 export interface AsrManagerEvents {
   ready: () => void;
   error: (err: Error) => void;
   text: (text: string) => void; // 整段錄音結束時的最終文字
+  /**
+   * P3：後處理結果（給 debug UI 用）
+   * 即使未啟用後處理也會 emit（此時 appliedRules=[]、changed=false）
+   */
+  postprocessed: (report: AsrPostprocessedPayload) => void;
 }
 
 export declare interface AsrManager {
@@ -159,6 +167,8 @@ export class AsrManager extends EventEmitter {
 
   /**
    * 停止 ASR 串流，廣播最終結果
+   *
+   * P3：套用後處理器（標點修正）並廣播詳細結果
    */
   async stop(): Promise<AsrResult> {
     if (!this.engine) {
@@ -168,17 +178,41 @@ export class AsrManager extends EventEmitter {
     this.totalDurationMs = Date.now() - this.startTime;
 
     // 合併所有 segment 成最終文字
-    const finalText = this.segmentBuffer.join(' ').trim();
-    this.lastFinalText = finalText;
+    const rawText = this.segmentBuffer.join(' ').trim() || result.text;
     this.segmentBuffer = [];
 
+    // P3 Stage 1：套用後處理器
+    const report = postprocessWithReport(
+      rawText,
+      this.settings.postprocessEnabled ? undefined : { disabledRules: DEFAULT_RULES.map((r) => r.id) },
+    );
+    const finalText = report.processed;
+    const changed = report.original !== report.processed;
+    this.lastFinalText = finalText;
+
+    // 廣播後處理結果（給 debug UI）
+    const postprocessedPayload: AsrPostprocessedPayload = {
+      original: report.original,
+      processed: report.processed,
+      appliedRules: report.appliedRules,
+      skippedRules: report.skippedRules,
+      changed,
+      timestamp: Date.now(),
+    };
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send(IPC.ASR_POSTPROCESSED, postprocessedPayload);
+      }
+    }
+    this.emit('postprocessed', postprocessedPayload);
+
     const finalResult: AsrResult = {
-      text: finalText || result.text,
+      text: finalText,
       segments: result.segments,
       durationMs: this.totalDurationMs,
     };
 
-    // broadcast final
+    // broadcast final（已後處理過的文字）
     const payload = {
       text: finalResult.text,
       segment: finalResult.segments,

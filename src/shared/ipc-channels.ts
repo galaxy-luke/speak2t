@@ -77,4 +77,10 @@ export const IPC = {
   DOWNLOAD_EXISTS: 'broadcast:download:exists',
   /** 使用者取消下載 */
   DOWNLOAD_CANCELLED: 'broadcast:download:cancelled',
+
+  // ===== P3 新增 =====
+
+  // ASR 後處理（main → renderer 廣播）
+  /** 標點後處理結果（給 debug UI 用） */
+  ASR_POSTPROCESSED: 'broadcast:asr:postprocessed',
 } as const;

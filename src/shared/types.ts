@@ -46,6 +46,12 @@ export interface AppSettings {
   customModelPath: string;
   /** 麥克風 deviceId（空字串 = 系統預設） */
   audioDeviceId: string;
+
+  // ===== P3 新增 =====
+  /** P3：自動標點修正（後處理器）— 預設開 */
+  postprocessEnabled: boolean;
+  /** P3：自動引擎降級（sherpa 失敗時自動切 whisper）— 預設開 */
+  autoDegrade: boolean;
 }
 
 /** 預設設定（D-A/B/C 決策結果） */
@@ -63,4 +69,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   customModelPath: '',
   /** 麥克風 deviceId（空字串 = 系統預設；P1 stage 6.5） */
   audioDeviceId: '',
+
+  // P3
+  postprocessEnabled: true, // P3 Stage 1
+  autoDegrade: true, // P3 Stage 2
 };

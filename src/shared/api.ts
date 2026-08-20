@@ -83,6 +83,11 @@ export interface Speak2tApi {
   onDownloadExists: (callback: (data: DownloadExistsPayload) => void) => () => void;
   /** 取消 */
   onDownloadCancelled: (callback: (data: DownloadCancelledPayload) => void) => () => void;
+
+  // ===== P3 新增 =====
+
+  /** P3：ASR 文字後處理結果（給 debug UI 用） */
+  onAsrPostprocessed: (callback: (data: AsrPostprocessedPayload) => void) => () => void;
 }
 
 // ===== 既有 payload =====
@@ -189,6 +194,23 @@ export interface DownloadExistsPayload {
 /** 取消下載 */
 export interface DownloadCancelledPayload {
   preset: string;
+  timestamp: number;
+}
+
+// ===== P3 新增 payload =====
+
+/** ASR 文字經過後處理的詳細結果 */
+export interface AsrPostprocessedPayload {
+  /** 原始 ASR 輸出 */
+  original: string;
+  /** 後處理後文字（注入到剪貼簿的版本） */
+  processed: string;
+  /** 套用且改變文字的規則 ID 列表 */
+  appliedRules: string[];
+  /** 被 disabled 跳過的規則 ID 列表 */
+  skippedRules: string[];
+  /** 是否有變化 */
+  changed: boolean;
   timestamp: number;
 }
 

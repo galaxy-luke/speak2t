@@ -24,6 +24,7 @@ import type {
   DownloadErrorPayload,
   DownloadExistsPayload,
   DownloadCancelledPayload,
+  AsrPostprocessedPayload,
 } from '../shared/api';
 
 const api: Speak2tApi = {
@@ -157,6 +158,14 @@ const api: Speak2tApi = {
     const listener = (_event: unknown, data: DownloadCancelledPayload) => callback(data);
     ipcRenderer.on(IPC.DOWNLOAD_CANCELLED, listener);
     return () => ipcRenderer.removeListener(IPC.DOWNLOAD_CANCELLED, listener);
+  },
+
+  // ===== P3：ASR 後處理事件 =====
+
+  onAsrPostprocessed: (callback) => {
+    const listener = (_event: unknown, data: AsrPostprocessedPayload) => callback(data);
+    ipcRenderer.on(IPC.ASR_POSTPROCESSED, listener);
+    return () => ipcRenderer.removeListener(IPC.ASR_POSTPROCESSED, listener);
   },
 };
 
