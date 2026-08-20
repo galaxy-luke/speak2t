@@ -37,6 +37,7 @@ import type {
   DownloadErrorPayload,
   DownloadExistsPayload,
   DownloadCancelledPayload,
+  DownloadVerifiedPayload,
   UpdateAvailablePayload,
   UpdateUpToDatePayload,
   UpdateDownloadProgressPayload,
@@ -431,6 +432,16 @@ function wireModelDownloader(): void {
     for (const win of BrowserWindow.getAllWindows()) {
       if (!win.isDestroyed()) {
         win.webContents.send(IPC.DOWNLOAD_CANCELLED, payload);
+      }
+    }
+  });
+
+  modelDownloader.on('verified', (e) => {
+    console.log(`[main] model download verified: ${e.preset} sha256=${e.actual.slice(0, 16)}…`);
+    const payload: DownloadVerifiedPayload = { ...e, timestamp: Date.now() };
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send(IPC.DOWNLOAD_VERIFIED, payload);
       }
     }
   });

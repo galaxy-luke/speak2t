@@ -17,6 +17,7 @@ import type {
   DownloadErrorPayload,
   DownloadExistsPayload,
   DownloadCancelledPayload,
+  DownloadVerifiedPayload,
 } from '../../../shared/api';
 
 export type DownloadStatus =
@@ -31,9 +32,19 @@ export type DownloadStatus =
       httpStatus?: number;
       cause?: string;
       stack?: string;
+      expected?: string;
+      actual?: string;
       timestamp: number;
     }
-  | { kind: 'cancelled'; preset: string; timestamp: number };
+  | { kind: 'cancelled'; preset: string; timestamp: number }
+  | {
+      /** SHA-256 校驗通過（暫態，下一步會 emit complete） */
+      kind: 'verified';
+      preset: string;
+      actual: string;
+      expected: string | null;
+      timestamp: number;
+    };
 
 export interface UseDownloadStateReturn {
   models: ModelInfo[];
@@ -110,12 +121,23 @@ export function useDownloadState(): UseDownloadStateReturn {
       }, 3000);
     });
 
+    const offVerified = window.speak2t.onDownloadVerified((data: DownloadVerifiedPayload) => {
+      setStatus({
+        kind: 'verified',
+        preset: data.preset,
+        actual: data.actual,
+        expected: data.expected,
+        timestamp: data.timestamp,
+      });
+    });
+
     return () => {
       offProgress();
       offComplete();
       offError();
       offExists();
       offCancelled();
+      offVerified();
     };
   }, [refresh]);
 

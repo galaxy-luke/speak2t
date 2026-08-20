@@ -22,11 +22,11 @@
  */
 
 import { createWriteStream, existsSync, mkdirSync, statSync, rmSync, renameSync, createReadStream } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createInterface } from 'node:readline';
-import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 
 // ===== 模式 =====
@@ -47,6 +47,13 @@ const MODELS = {
     preset: 'sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20',
     /** 預期下載大小（bytes，用於 UI 顯示） */
     sizeBytes: 357564000,
+    /**
+     * tar.bz2 完整檔案的 SHA-256（hex lowercase）。
+     * 用途：下載完算 hash 比對，確保檔案完整沒被截斷或竄改。
+     * 來源：本機下載一次算 baseline（sherpa-onnx release 沒附 .sha256）。
+     * 之後可改用 CI 從 release 自動算。
+     */
+    sha256: '27ffbd9ee24ad186d99acc2f6354d7992b27bcab490812510665fa8f9389c5f8',
   },
   'whisper-small': {
     name: 'whisper-small (ggml)',
@@ -57,6 +64,12 @@ const MODELS = {
     cleanup: [],
     preset: 'whisper-small',
     sizeBytes: 462422000,
+    /**
+     * ggml-small.bin 完整檔案的 SHA-256（hex lowercase）。
+     * 來源：huggingface.co/ggerganov/whisper.cpp 官方 LFS。
+     * 待首次下載後用 Get-FileHash 校對後填入。
+     */
+    sha256: null, // TODO: 首次下載後填入
   },
 };
 
@@ -227,48 +240,55 @@ async function downloadFile(url, destPath) {
   let downloaded = 0;
   const nodeStream = Readable.fromWeb(response.body);
 
-  const writer = pipeline(nodeStream, async (chunk) => {
-    if (cancelled) {
-      throw new Error('cancelled');
-    }
-    downloaded += chunk.length;
-    fileStream.write(chunk);
+  // 用 for-await 直接迭代（Node 24.7 的 pipeline(..., asyncTransform) 對 web stream
+  // 的 chunk 處理壞掉，會把整個 Readable 當 chunk 傳進去 → ERR_INVALID_ARG_TYPE）
+  try {
+    for await (const chunk of nodeStream) {
+      if (cancelled) {
+        fileStream.destroy();
+        throw new Error('cancelled');
+      }
+      downloaded += chunk.length;
+      // backpressure：write 回傳 false 表示 buffer 滿了，等 drain 再繼續
+      if (!fileStream.write(chunk)) {
+        await new Promise((resolve) => fileStream.once('drain', resolve));
+      }
 
-    const now = Date.now();
-    const dt = (now - lastReportTime) / 1000;
-    if (dt > 0.2 || downloaded === total) {
-      const speed = dt > 0 ? (downloaded - lastDownloaded) / dt : 0;
-      lastDownloaded = downloaded;
-      lastReportTime = now;
-      const elapsed = (now - startTime) / 1000;
-      const remaining = speed > 0 ? (total - downloaded) / speed : 0;
-      const pct = total > 0 ? (downloaded / total) * 100 : 0;
+      const now = Date.now();
+      const dt = (now - lastReportTime) / 1000;
+      if (dt > 0.2 || downloaded === total) {
+        const speed = dt > 0 ? (downloaded - lastDownloaded) / dt : 0;
+        lastDownloaded = downloaded;
+        lastReportTime = now;
+        const elapsed = (now - startTime) / 1000;
+        const remaining = speed > 0 ? (total - downloaded) / speed : 0;
+        const pct = total > 0 ? (downloaded / total) * 100 : 0;
 
-      if (JSON_MODE) {
-        emit({
-          event: 'progress',
-          phase: 'downloading',
-          downloaded,
-          total,
-          percent: Math.round(pct * 10) / 10,
-          speedBps: Math.round(speed),
-          remainingSec: Math.round(remaining),
-          elapsedMs: Math.round(elapsed * 1000),
-        });
-      } else {
-        const line =
-          `\r  ${formatBytes(downloaded)} / ${total > 0 ? formatBytes(total) : '?'} ` +
-          `(${(pct).toFixed(1)}%) ${humanSpeed(speed)} ` +
-          `${total > 0 ? `剩 ${timeRemaining(remaining)}` : ''}   `;
-        process.stdout.write(line);
+        if (JSON_MODE) {
+          emit({
+            event: 'progress',
+            phase: 'downloading',
+            downloaded,
+            total,
+            percent: Math.round(pct * 10) / 10,
+            speedBps: Math.round(speed),
+            remainingSec: Math.round(remaining),
+            elapsedMs: Math.round(elapsed * 1000),
+          });
+        } else {
+          const line =
+            `\r  ${formatBytes(downloaded)} / ${total > 0 ? formatBytes(total) : '?'} ` +
+            `(${(pct).toFixed(1)}%) ${humanSpeed(speed)} ` +
+            `${total > 0 ? `剩 ${timeRemaining(remaining)}` : ''}   `;
+          process.stdout.write(line);
+        }
       }
     }
-  });
-
-  await writer;
-  await new Promise((resolve, reject) => {
-    fileStream.end((err) => (err ? reject(err) : resolve()));
-  });
+  } finally {
+    await new Promise((resolve, reject) => {
+      fileStream.end((err) => (err ? reject(err) : resolve()));
+    });
+  }
 
   if (!JSON_MODE) {
     process.stdout.write('\n');
@@ -276,6 +296,58 @@ async function downloadFile(url, destPath) {
     console.log(`✓ 下載完成：${formatBytes(downloaded)} in ${timeRemaining(totalSec)}`);
   }
   return downloaded;
+}
+
+/**
+ * 計算檔案 SHA-256（streaming，避免整檔讀進記憶體）
+ */
+function sha256OfFile(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = createHash('sha256');
+    const stream = createReadStream(filePath);
+    stream.on('data', (chunk) => hash.update(chunk));
+    stream.on('end', () => resolve(hash.digest('hex')));
+    stream.on('error', (err) => reject(err));
+  });
+}
+
+/**
+ * 下載完後驗證 SHA-256
+ * - expected 為 null → 跳過（僅計算並報告實際 hash）
+ * - 對上 → 回傳 { ok: true, actual }
+ * - 不對 → 刪除檔案 + 拋錯（emitError）
+ */
+async function verifyDownloadedFile(filePath, expected) {
+  if (JSON_MODE) {
+    emit({ event: 'phase', phase: 'verifying', message: `驗證 SHA-256：${filePath}` });
+  } else {
+    console.log(`\n驗證 SHA-256：${filePath}`);
+  }
+  const actual = await sha256OfFile(filePath);
+  if (JSON_MODE) {
+    emit({ event: 'hash', algorithm: 'sha256', actual });
+  } else {
+    console.log(`  實際：${actual}`);
+    if (expected) console.log(`  預期：${expected}`);
+  }
+  if (!expected) {
+    return { ok: true, actual, expected: null, skipped: true };
+  }
+  if (actual.toLowerCase() !== expected.toLowerCase()) {
+    // 算 hash 失敗 → 刪除 corrupt 檔，避免後續解壓/使用壞檔
+    if (existsSync(filePath)) {
+      rmSync(filePath, { force: true });
+    }
+    throw new Error(
+      `SHA-256 驗證失敗：預期 ${expected}，實際 ${actual}（檔案可能損毀或被竄改，已刪除）`
+    );
+  }
+  if (JSON_MODE) {
+    emit({ event: 'verified', algorithm: 'sha256', actual });
+  } else {
+    console.log(`  ✓ SHA-256 驗證通過`);
+  }
+  return { ok: true, actual, expected, skipped: false };
 }
 
 /**
@@ -327,10 +399,11 @@ function cleanupDir(dir, patterns) {
 
 // ===== Main =====
 async function main() {
-  const args = process.argv.slice(2).filter((a) => a !== '--json');
+  // 過濾掉 flag 參數，只留「位置參數」（模型 key）
+  const args = process.argv.slice(2).filter((a) => !a.startsWith('--') && !a.startsWith('-'));
 
   // --list
-  if (args.includes('--list') || args.includes('-l')) {
+  if (process.argv.includes('--list') || process.argv.includes('-l')) {
     if (JSON_MODE) {
       const list = Object.entries(MODELS).map(([key, m]) => ({
         key,
@@ -354,12 +427,16 @@ async function main() {
   }
 
   // --help
-  if (args.includes('--help') || args.includes('-h')) {
+  if (process.argv.includes('--help') || process.argv.includes('-h')) {
     console.log(`用法：
   node scripts/download-model.mjs                     → 互動選單
   node scripts/download-model.mjs sherpa-zh-en        → 直接下載
   node scripts/download-model.mjs --list              → 列出可用模型
   node scripts/download-model.mjs --json sherpa-zh-en → JSON 事件流（main 進程用）
+  node scripts/download-model.mjs --force sherpa-zh-en → 覆蓋已安裝的模型
+
+  SHA-256 驗證：
+  下載完會比對 MODELS.sha256（若未填則只算不驗證）。驗證失敗會自動刪除 corrupt 檔。
 `);
     return;
   }
@@ -394,27 +471,38 @@ async function main() {
     }
   }
 
+  // --force 跳過已存在檢查（用於重裝 / 強制重抓）
+  const FORCE = process.argv.includes('--force') || process.argv.includes('-f');
+
   if (!JSON_MODE) {
     console.log(`\n📦 ${model.name}`);
     console.log(`   ${model.description}`);
-    console.log(`   URL: ${model.url}\n`);
+    console.log(`   URL: ${model.url}`);
+    if (model.sha256) console.log(`   SHA-256: ${model.sha256}`);
+    console.log();
   }
 
   const targetDir = getModelDir(model.preset);
 
   // 檢查是否已存在
   if (existsSync(targetDir)) {
-    if (JSON_MODE) {
+    if (JSON_MODE && !FORCE) {
+      // UI 收到 exists 事件可決定要不要重下（user 按「重新下載」會帶 --force）
       emit({ event: 'exists', path: targetDir });
       process.exit(5);
-    } else {
+    } else if (!JSON_MODE) {
       console.log(`⚠️  目標目錄已存在：${targetDir}`);
-      const ok = await confirm('要覆蓋嗎？');
-      if (!ok) {
-        console.log('已取消');
-        process.exit(3);
+      if (!FORCE) {
+        const ok = await confirm('要覆蓋嗎？');
+        if (!ok) {
+          console.log('已取消');
+          process.exit(3);
+        }
       }
       console.log('移除舊目錄...');
+      rmSync(targetDir, { recursive: true, force: true });
+    } else {
+      // JSON + FORCE → 直接覆蓋
       rmSync(targetDir, { recursive: true, force: true });
     }
   }
@@ -457,21 +545,76 @@ async function main() {
     process.exit(1);
   }
 
+  // SHA-256 校驗（若 MODELS 有 sha256 就強制驗證；沒有就只算 hash 給 UI 顯示）
+  try {
+    const result = await verifyDownloadedFile(tmpArchive, model.sha256 ?? null);
+    if (!JSON_MODE) {
+      if (result.skipped) {
+        console.log(`（未指定預期 hash，僅顯示實際 hash 供參考）`);
+      } else {
+        console.log(`✓ SHA-256 校驗通過`);
+      }
+    }
+  } catch (err) {
+    if (cancelled) {
+      if (existsSync(tmpArchive)) rmSync(tmpArchive, { force: true });
+      process.exit(130);
+    }
+    if (JSON_MODE) {
+      emitError(`校驗失敗：${err.message}`, 'checksum_mismatch', {
+        url: model.url,
+        expected: model.sha256,
+      });
+    } else {
+      console.error(`\n✗ ${err.message}`);
+    }
+    if (existsSync(tmpArchive)) {
+      rmSync(tmpArchive, { force: true });
+    }
+    process.exit(3);
+  }
+
   // 解壓或搬移
   try {
     if (model.archive === 'tar.bz2') {
-      mkdirSync(targetDir, { recursive: true });
-      await extractTarBz2(tmpArchive, targetDir);
+      // 先解到 staging dir（避免直接寫進 targetDir 後被 rmSync 連帶刪除）
+      const stagingDir = `${targetDir}.extract`;
+      if (existsSync(stagingDir)) {
+        rmSync(stagingDir, { recursive: true, force: true });
+      }
+      mkdirSync(stagingDir, { recursive: true });
+      await extractTarBz2(tmpArchive, stagingDir);
 
-      // 重新命名子目錄
+      // 重新命名子目錄：stagingDir/<extractedDir> → targetDir
       if (model.extractedDir) {
-        const inner = join(targetDir, model.extractedDir);
-        if (existsSync(inner) && inner !== targetDir) {
-          rmSync(targetDir, { recursive: true, force: true });
+        const inner = join(stagingDir, model.extractedDir);
+        if (existsSync(inner)) {
+          if (existsSync(targetDir)) {
+            rmSync(targetDir, { recursive: true, force: true });
+          }
           renameSync(inner, targetDir);
+          rmSync(stagingDir, { recursive: true, force: true });
           if (!JSON_MODE) {
             console.log(`✓ 重新命名：${inner} → ${targetDir}`);
           }
+        } else {
+          // extractedDir 不存在（tar 沒包這層），直接用 stagingDir 當 target
+          if (existsSync(targetDir)) {
+            rmSync(targetDir, { recursive: true, force: true });
+          }
+          renameSync(stagingDir, targetDir);
+          if (!JSON_MODE) {
+            console.log(`✓ 解壓直接到：${targetDir}`);
+          }
+        }
+      } else {
+        // 沒指定 extractedDir（不適用於本專案模型，保留 fallback）
+        if (existsSync(targetDir)) {
+          rmSync(targetDir, { recursive: true, force: true });
+        }
+        renameSync(stagingDir, targetDir);
+        if (!JSON_MODE) {
+          console.log(`✓ 解壓到：${targetDir}`);
         }
       }
 
@@ -489,8 +632,12 @@ async function main() {
     }
 
     const durationMs = Date.now() - downloadStart;
+    // 成功後清掉 tmp 檔（避免磁碟累積）
+    if (existsSync(tmpArchive)) {
+      rmSync(tmpArchive, { force: true });
+    }
     if (JSON_MODE) {
-      emit({ event: 'done', path: targetDir, durationMs });
+      emit({ event: 'done', path: targetDir, durationMs, sha256: model.sha256 ?? null });
     } else {
       console.log(`\n✅ 模型下載完成！`);
       console.log(`   路徑：${targetDir}`);

@@ -25,6 +25,11 @@ export interface ModelInfo {
   sizeBytes: number;
   path: string;
   installed: boolean;
+  /**
+   * 預期 SHA-256（hex lowercase），下載完會校對。
+   * 沒填 = 該模型還沒建立 baseline（首次下載後回填）
+   */
+  sha256: string | null;
 }
 
 /** 下載進度事件 */
@@ -64,9 +69,20 @@ export interface DownloadCancelledEvent {
   preset: string;
 }
 
+/** SHA-256 校驗事件 */
+export interface DownloadVerifiedEvent {
+  preset: string;
+  algorithm: 'sha256';
+  /** 實際算出的 hash（hex lowercase） */
+  actual: string;
+  /** 預期 hash（MODELS.sha256，若無則 null） */
+  expected: string | null;
+}
+
 export interface ModelDownloaderEvents {
   start: (e: { preset: string; total: number }) => void;
   progress: (e: DownloadProgressEvent) => void;
+  verified: (e: DownloadVerifiedEvent) => void;
   complete: (e: DownloadCompleteEvent) => void;
   error: (e: DownloadErrorEvent) => void;
   exists: (e: DownloadExistsEvent) => void;
@@ -90,6 +106,7 @@ const MODELS: Omit<ModelInfo, 'installed' | 'path'>[] = [
     description: 'sherpa-onnx 串流模型（中英混講，~340 MB）',
     preset: 'sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20',
     sizeBytes: 357_564_000,
+    sha256: '27ffbd9ee24ad186d99acc2f6354d7992b27bcab490812510665fa8f9389c5f8',
   },
   {
     key: 'whisper-small',
@@ -97,6 +114,7 @@ const MODELS: Omit<ModelInfo, 'installed' | 'path'>[] = [
     description: 'Whisper.cpp 離線模型（中英，~460 MB）',
     preset: 'whisper-small',
     sizeBytes: 462_422_000,
+    sha256: null, // TODO: 首次下載後用 Get-FileHash 算出來回填
   },
 ];
 
@@ -294,6 +312,26 @@ export class ModelDownloader extends EventEmitter {
 
       case 'exists':
         this.emit('exists', { preset, path: e.path as string } as DownloadExistsEvent);
+        break;
+
+      case 'hash':
+        // 算完 hash 還沒比對（只算不驗證的情境，例如 expected 為 null）
+        this.emit('verified', {
+          preset,
+          algorithm: 'sha256',
+          actual: e.actual as string,
+          expected: null, // hash 事件沒有 expected，比對結果看下一個 verified 或 error
+        } as DownloadVerifiedEvent);
+        break;
+
+      case 'verified':
+        // 校驗通過
+        this.emit('verified', {
+          preset,
+          algorithm: 'sha256',
+          actual: e.actual as string,
+          expected: e.actual as string, // verified 事件 = actual 對得起 expected
+        } as DownloadVerifiedEvent);
         break;
 
       case 'done':

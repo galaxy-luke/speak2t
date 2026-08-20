@@ -49,7 +49,8 @@ function ModelItem({ model, status, onDownload, onCancel }: {
   const isJustCompleted = status.kind === 'completed' && status.preset === model.key;
   const isJustErrored = status.kind === 'error' && status.preset === model.key;
   const isJustCancelled = status.kind === 'cancelled' && status.preset === model.key;
-  const isActive = isDownloading || isJustCompleted || isJustErrored || isJustCancelled;
+  const isJustVerified = status.kind === 'verified' && status.preset === model.key;
+  const isActive = isDownloading || isJustCompleted || isJustErrored || isJustCancelled || isJustVerified;
 
   return (
     <div className={`model-item ${isActive ? 'active' : ''}`}>
@@ -57,10 +58,20 @@ function ModelItem({ model, status, onDownload, onCancel }: {
         <div className="model-info">
           <div className="model-name">
             {model.installed ? '✅' : '📦'} {model.name}
+            {model.sha256 && (
+              <span className="model-sha256" title={`SHA-256: ${model.sha256}`}>
+                {' '}🔒 已驗證
+              </span>
+            )}
           </div>
           <div className="model-desc">{model.description}</div>
           <div className="model-meta">
             <code className="code-mono">{model.path}</code>
+            {model.sha256 && (
+              <div className="model-hash">
+                SHA-256: <code className="code-mono">{model.sha256.slice(0, 16)}…{model.sha256.slice(-8)}</code>
+              </div>
+            )}
           </div>
         </div>
         <div className="model-action">
@@ -92,6 +103,12 @@ function ModelItem({ model, status, onDownload, onCancel }: {
         <DownloadProgressView progress={status.progress} />
       )}
 
+      {isJustVerified && status.kind === 'verified' && (
+        <p className="model-msg success">
+          🔒 SHA-256 校驗通過 — <code className="code-mono">{status.actual.slice(0, 16)}…</code>
+        </p>
+      )}
+
       {isJustCompleted && (
         <p className="model-msg success">✓ 下載完成！ASR 引擎已自動重載，可立即使用。</p>
       )}
@@ -101,11 +118,15 @@ function ModelItem({ model, status, onDownload, onCancel }: {
           <p>
             ⚠️ <strong>下載失敗：{status.message}</strong>
           </p>
-          {(status.httpStatus !== undefined || status.cause || status.url) && (
+          {(status.httpStatus !== undefined || status.cause || status.url || status.expected) && (
             <ul className="error-details">
               {status.httpStatus !== undefined && <li>HTTP status：{status.httpStatus}</li>}
               {status.cause && <li>底層原因：{status.cause}</li>}
               {status.url && <li>URL：<code className="code-mono">{status.url}</code></li>}
+              {status.expected && <li>預期 SHA-256：<code className="code-mono">{status.expected}</code></li>}
+              {status.actual && status.actual !== status.expected && (
+                <li>實際 SHA-256：<code className="code-mono">{status.actual}</code></li>
+              )}
             </ul>
           )}
         </div>

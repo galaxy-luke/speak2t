@@ -83,6 +83,8 @@ export interface Speak2tApi {
   onDownloadExists: (callback: (data: DownloadExistsPayload) => void) => () => void;
   /** 取消 */
   onDownloadCancelled: (callback: (data: DownloadCancelledPayload) => void) => () => void;
+  /** SHA-256 校驗結果（verify 通過時觸發） */
+  onDownloadVerified: (callback: (data: DownloadVerifiedPayload) => void) => () => void;
 
   // ===== P3 新增 =====
 
@@ -172,6 +174,11 @@ export interface ModelInfo {
   sizeBytes: number;
   path: string;
   installed: boolean;
+  /**
+   * 預期 SHA-256（hex lowercase），下載完會校對。
+   * null = 該模型還沒建立 baseline。
+   */
+  sha256: string | null;
 }
 
 /** 下載進度 */
@@ -198,7 +205,7 @@ export interface DownloadCompletePayload {
 /** 下載失敗 */
 export interface DownloadErrorPayload {
   preset: string;
-  /** 錯誤代碼（download_failed / spawn_error / http_<status> / timeout / extract_failed 等） */
+  /** 錯誤代碼（download_failed / spawn_error / http_<status> / timeout / extract_failed / checksum_mismatch 等） */
   code: string;
   /** 主錯誤訊息 */
   message: string;
@@ -210,6 +217,21 @@ export interface DownloadErrorPayload {
   cause?: string;
   /** stack trace 第一行（debug 用） */
   stack?: string;
+  /** 預期 SHA-256（checksum_mismatch 才有） */
+  expected?: string;
+  /** 實際 SHA-256（checksum_mismatch 才有） */
+  actual?: string;
+  timestamp: number;
+}
+
+/** SHA-256 校驗事件（verify 通過時） */
+export interface DownloadVerifiedPayload {
+  preset: string;
+  algorithm: 'sha256';
+  /** 實際算出的 hash（hex lowercase） */
+  actual: string;
+  /** 預期 hash（若無則 null = 只算不算） */
+  expected: string | null;
   timestamp: number;
 }
 

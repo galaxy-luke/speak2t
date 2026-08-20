@@ -77,6 +77,8 @@ export const IPC = {
   DOWNLOAD_EXISTS: 'broadcast:download:exists',
   /** 使用者取消下載 */
   DOWNLOAD_CANCELLED: 'broadcast:download:cancelled',
+  /** SHA-256 校驗結果（verify 通過時） */
+  DOWNLOAD_VERIFIED: 'broadcast:download:verified',
 
   // ===== P3 新增 =====
 
