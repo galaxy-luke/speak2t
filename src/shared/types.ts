@@ -44,6 +44,8 @@ export interface AppSettings {
   audioSampleRate: number;
   /** 自訂模型路徑（留空 = 用預設下載位置） */
   customModelPath: string;
+  /** 麥克風 deviceId（空字串 = 系統預設） */
+  audioDeviceId: string;
 }
 
 /** 預設設定（D-A/B/C 決策結果） */
@@ -59,4 +61,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   asrModelPreset: 'sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20', // D-5
   audioSampleRate: 16000,
   customModelPath: '',
+  /** 麥克風 deviceId（空字串 = 系統預設；P1 stage 6.5） */
+  audioDeviceId: '',
 };

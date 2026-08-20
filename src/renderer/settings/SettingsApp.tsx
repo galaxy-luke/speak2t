@@ -28,6 +28,9 @@ export function SettingsApp() {
   const [micError, setMicError] = useState<string | null>(null);
   const [level, setLevel] = useState(0);
 
+  // P1 stage 6.5: 麥克風設備選擇
+  const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
+
   const [asrPartial, setAsrPartial] = useState('');
   const [asrFinal, setAsrFinal] = useState('');
   const [asrHistory, setAsrHistory] = useState<string[]>([]);
@@ -101,6 +104,43 @@ export function SettingsApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // P1 stage 6.5: enumerate 麥克風設備 + 監聽 devicechange
+  useEffect(() => {
+    let cancelled = false;
+
+    async function refreshDevices() {
+      try {
+        const all = await navigator.mediaDevices.enumerateDevices();
+        if (cancelled) return;
+        const mics = all.filter((d) => d.kind === 'audioinput');
+        setAudioDevices(mics);
+      } catch (err) {
+        console.warn('[settings] enumerateDevices failed:', err);
+      }
+    }
+
+    refreshDevices();
+    navigator.mediaDevices.addEventListener('devicechange', refreshDevices);
+    return () => {
+      cancelled = true;
+      navigator.mediaDevices.removeEventListener('devicechange', refreshDevices);
+    };
+  }, []);
+
+  /**
+   * user 切換麥克風設備
+   * 存到 settings.audioDeviceId，下次 startMic 用
+   */
+  async function handleDeviceChange(deviceId: string) {
+    setSettings((prev) => (prev ? { ...prev, audioDeviceId: deviceId } : prev));
+    try {
+      await window.speak2t.saveSettings({ audioDeviceId: deviceId });
+      console.log(`[settings] switched audio device → ${deviceId || '(system default)'}`);
+    } catch (err) {
+      console.error('[settings] save audio device failed:', err);
+    }
+  }
+
   async function startMic() {
     if (isRecording) return;
     setMicError(null);
@@ -109,15 +149,31 @@ export function SettingsApp() {
     setAsrError(null);
 
     try {
+      // 構建 audio constraints
+      // 如果 user 選了特定麥克風，用 deviceId exact
+      const audioConstraints: MediaTrackConstraints = {
+        channelCount: 1,
+        sampleRate: 16000,
+        echoCancellation: true,
+        noiseSuppression: true,
+      };
+      if (settings?.audioDeviceId) {
+        audioConstraints.deviceId = { exact: settings.audioDeviceId };
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          sampleRate: 16000,
-          echoCancellation: true,
-          noiseSuppression: true,
-        },
+        audio: audioConstraints,
       });
       streamRef.current = stream;
+
+      // 第一次成功 getUserMedia 後，label 才會顯示 → 重抓 device 列表
+      try {
+        const all = await navigator.mediaDevices.enumerateDevices();
+        const mics = all.filter((d) => d.kind === 'audioinput');
+        setAudioDevices(mics);
+      } catch {
+        // ignore
+      }
 
       const sampleRate = 16000;
       const audioContext = new AudioContext({ sampleRate });
@@ -221,10 +277,44 @@ export function SettingsApp() {
             <dd>
               <code>{settings.asrModelPreset}</code>
             </dd>
+            <dt>麥克風</dt>
+            <dd>
+              <code>
+                {(() => {
+                  if (!settings.audioDeviceId) return '系統預設';
+                  const d = audioDevices.find((d) => d.deviceId === settings.audioDeviceId);
+                  return d?.label || `deviceId ${settings.audioDeviceId.slice(0, 8)}…`;
+                })()}
+              </code>
+            </dd>
           </dl>
         ) : (
           <p>載入中…</p>
         )}
+      </section>
+
+      <section className="card">
+        <h2>🎙️ 麥克風選擇（P1 Stage 6.5）</h2>
+        <p>選擇預設麥克風設備，或留空用系統預設：</p>
+        <div className="mic-select">
+          <select
+            className="select-mic"
+            value={settings?.audioDeviceId ?? ''}
+            onChange={(e) => void handleDeviceChange(e.target.value)}
+          >
+            <option value="">（系統預設麥克風）</option>
+            {audioDevices.map((d) => (
+              <option key={d.deviceId} value={d.deviceId}>
+                {d.label || `deviceId ${d.deviceId.slice(0, 8)}…`}
+              </option>
+            ))}
+          </select>
+          <span className="count">已偵測 {audioDevices.length} 個輸入裝置</span>
+        </div>
+        <p className="hint">
+          新插入耳機或 USB 麥克風時會自動偵測（devicechange event）。
+          完整裝置名稱需先按下「開始」讓瀏覽器取得權限後才會顯示。
+        </p>
       </section>
 
       <section className="card">

@@ -185,6 +185,37 @@ kbd {
   margin: 12px 0;
 }
 
+.mic-select {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+  flex-wrap: wrap;
+}
+
+.select-mic {
+  flex: 1;
+  min-width: 240px;
+  padding: 8px 12px;
+  background: #1a1a1a;
+  color: #ffd966;
+  border: 1px solid #444;
+  border-radius: 6px;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.select-mic:hover {
+  border-color: #4a9eff;
+}
+
+.select-mic:focus {
+  outline: none;
+  border-color: #4a9eff;
+  box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.2);
+}
+
 .btn {
   padding: 8px 16px;
   border: none;
