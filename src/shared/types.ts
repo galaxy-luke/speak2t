@@ -58,6 +58,41 @@ export interface AppSettings {
   postprocessEnabled: boolean;
   /** P3：自動引擎降級（sherpa 失敗時自動切 whisper）— 預設開 */
   autoDegrade: boolean;
+
+  // ===== TOFU 自我校驗 =====
+  /**
+   * 每個已下載模型的自建 SHA-256 基線（Trust On First Use）。
+   *
+   * key = preset key（AsrModelPreset）
+   *
+   * 流程：
+   * 1. 第一次下載模型時，若 preset 沒官方 SHA-256 baseline → 自動算磁碟 hash 存這裡
+   * 2. 之後每次 app 啟動 / 載入模型時，重算磁碟 hash 跟這裡比對
+   * 3. 不符 = 檔案被竊改 / 磁碟損壞 → 顯示警告 toast
+   *
+   * 跟官方 baseline（preset.sha256）互斥：有的話走官方，沒有的話走 TOFU。
+   */
+  tofuBaselines: Record<AsrModelPreset, TofuBaseline>;
+}
+
+/**
+ * TOFU 自我校驗基線（存進 settings.json）
+ *
+ * 設計：
+ * - `sha256`：首次下載後自動算的 hash，作為日後自我校驗的基準
+ * - `sizeBytes`：對應檔案大小（用於快速 sanity check，比 hash 快）
+ * - `establishedAt`：ISO 8601 timestamp，何時建立這個基線
+ * - `source`：建立來源（auto = 下載完成時自動建 / manual = user 手動指定）
+ */
+export interface TofuBaseline {
+  /** SHA-256 hash（hex lowercase） */
+  sha256: string;
+  /** 對應檔案大小（bytes） */
+  sizeBytes: number;
+  /** 建立時間（ISO 8601） */
+  establishedAt: string;
+  /** 建立來源 */
+  source: 'auto' | 'manual';
 }
 
 /** 預設設定（D-A/B/C 決策結果） */
@@ -79,4 +114,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // P3
   postprocessEnabled: true, // P3 Stage 1
   autoDegrade: true, // P3 Stage 2
+
+  // TOFU 自我校驗：每個 preset 的自建 hash 基線（首次下載後自動填）
+  tofuBaselines: {} as Record<AsrModelPreset, TofuBaseline>,
 };

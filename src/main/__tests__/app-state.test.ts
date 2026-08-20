@@ -68,6 +68,31 @@ describe('AppState', () => {
       expect(settings.asrEngine).toBe(DEFAULT_SETTINGS.asrEngine);
       expect(settings.postprocessEnabled).toBe(DEFAULT_SETTINGS.postprocessEnabled);
     });
+
+    it('缺少 tofuBaselines 時補上空物件（向下相容 P5 之前版本）', () => {
+      // 模擬舊版設定檔（沒有 tofuBaselines 欄位）
+      const partial = { hotkey: 'Alt+X' };
+      writeFileSync(join(tmpDir, 'settings.json'), JSON.stringify(partial), 'utf-8');
+      const state = new AppState();
+      const settings = state.getSettings();
+      expect(settings.tofuBaselines).toEqual({});
+    });
+
+    it('保留已存在的 tofuBaselines 內容', () => {
+      const tofuEntry = {
+        sha256: 'a'.repeat(64),
+        sizeBytes: 138_200_625,
+        establishedAt: '2026-08-20T08:00:00.000Z',
+        source: 'auto' as const,
+      };
+      const partial = {
+        tofuBaselines: { 'luigi-x-asr-zh-tw-en-ft75m': tofuEntry },
+      };
+      writeFileSync(join(tmpDir, 'settings.json'), JSON.stringify(partial), 'utf-8');
+      const state = new AppState();
+      const settings = state.getSettings();
+      expect(settings.tofuBaselines['luigi-x-asr-zh-tw-en-ft75m']).toEqual(tofuEntry);
+    });
   });
 
   describe('saveSettingsToDisk', () => {
