@@ -88,11 +88,26 @@ function emit(obj) {
   }
 }
 
-function emitError(message, code = 'error') {
+/**
+ * Emit error event (JSON mode) or print to stderr (CLI mode)
+ * @param message - 主錯誤訊息
+ * @param code - 錯誤代碼（例: 'download_failed' / 'http_<status>' / 'timeout'）
+ * @param details - 額外資訊（url / httpStatus / cause / stack trace 第一行）
+ */
+function emitError(message, code = 'error', details = {}) {
   if (JSON_MODE) {
-    process.stdout.write(JSON.stringify({ event: 'error', code, message }) + '\n');
+    process.stdout.write(JSON.stringify({
+      event: 'error',
+      code,
+      message,
+      timestamp: Date.now(),
+      ...details,
+    }) + '\n');
   } else {
     console.error(`錯誤：${message}`);
+    if (details.url) console.error(`  URL: ${details.url}`);
+    if (details.httpStatus) console.error(`  HTTP status: ${details.httpStatus}`);
+    if (details.cause) console.error(`  原因: ${details.cause}`);
   }
 }
 
@@ -178,9 +193,26 @@ async function downloadFile(url, destPath) {
   let lastReportTime = startTime;
   let lastDownloaded = 0;
 
-  const response = await fetch(url, { redirect: 'follow' });
+  // 30 秒 fetch timeout（避免網路慢到極點時 hang 整個下載流程）
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30_000);
+  let response;
+  try {
+    response = await fetch(url, { redirect: 'follow', signal: controller.signal });
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error('下載超時（30 秒）');
+    }
+    throw err;
+  }
+  clearTimeout(timeoutId);
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status} ${response.statusText}`);
+    // 帶 status + url 讓 UI 能顯示「HTTP 404 / 503 / URL」
+    const httpErr = new Error(`HTTP ${response.status} ${response.statusText}`);
+    httpErr.httpStatus = response.status;
+    httpErr.url = url;
+    throw httpErr;
   }
   if (!response.body) {
     throw new Error('response body is null');
@@ -407,9 +439,17 @@ async function main() {
       process.exit(130);
     }
     if (JSON_MODE) {
-      emitError(`下載失敗：${err.message}`, 'download_failed');
+      // 帶詳細資訊給 UI（url / httpStatus / cause / stack trace 第一行）
+      emitError(`下載失敗：${err.message}`, 'download_failed', {
+        url: err.url ?? model.url,
+        httpStatus: err.httpStatus,
+        cause: err.cause?.message ?? err.code ?? null,
+        stack: (err.stack ?? '').split('\n')[0],
+      });
     } else {
       console.error(`\n✗ 下載失敗：${err.message}`);
+      if (err.cause) console.error(`   原因：${err.cause.message ?? err.cause}`);
+      if (err.httpStatus) console.error(`   HTTP status: ${err.httpStatus}`);
     }
     if (existsSync(tmpArchive)) {
       rmSync(tmpArchive, { force: true });

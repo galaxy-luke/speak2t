@@ -314,6 +314,10 @@ export class ModelDownloader extends EventEmitter {
           preset,
           code: (e.code as string) ?? 'unknown',
           message: (e.message as string) ?? 'unknown error',
+          url: e.url as string | undefined,
+          httpStatus: e.httpStatus as number | undefined,
+          cause: e.cause as string | undefined,
+          timestamp: (e.timestamp as number) ?? Date.now(),
         } as DownloadErrorEvent);
         break;
 

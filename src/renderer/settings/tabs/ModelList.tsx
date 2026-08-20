@@ -97,7 +97,18 @@ function ModelItem({ model, status, onDownload, onCancel }: {
       )}
 
       {isJustErrored && status.kind === 'error' && (
-        <p className="model-msg error">⚠️ 下載失敗：{status.message}</p>
+        <div className="model-msg error">
+          <p>
+            ⚠️ <strong>下載失敗：{status.message}</strong>
+          </p>
+          {(status.httpStatus !== undefined || status.cause || status.url) && (
+            <ul className="error-details">
+              {status.httpStatus !== undefined && <li>HTTP status：{status.httpStatus}</li>}
+              {status.cause && <li>底層原因：{status.cause}</li>}
+              {status.url && <li>URL：<code className="code-mono">{status.url}</code></li>}
+            </ul>
+          )}
+        </div>
       )}
 
       {isJustCancelled && (

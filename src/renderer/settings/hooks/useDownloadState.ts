@@ -23,7 +23,16 @@ export type DownloadStatus =
   | { kind: 'idle' }
   | { kind: 'downloading'; preset: string; progress: DownloadProgressPayload }
   | { kind: 'completed'; preset: string; timestamp: number }
-  | { kind: 'error'; preset: string; message: string; timestamp: number }
+  | {
+      kind: 'error';
+      preset: string;
+      message: string;
+      url?: string;
+      httpStatus?: number;
+      cause?: string;
+      stack?: string;
+      timestamp: number;
+    }
   | { kind: 'cancelled'; preset: string; timestamp: number };
 
 export interface UseDownloadStateReturn {
@@ -81,6 +90,10 @@ export function useDownloadState(): UseDownloadStateReturn {
         kind: 'error',
         preset: data.preset,
         message: data.message,
+        url: data.url,
+        httpStatus: data.httpStatus,
+        cause: data.cause,
+        stack: data.stack,
         timestamp: data.timestamp,
       });
     });

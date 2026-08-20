@@ -198,8 +198,18 @@ export interface DownloadCompletePayload {
 /** 下載失敗 */
 export interface DownloadErrorPayload {
   preset: string;
+  /** 錯誤代碼（download_failed / spawn_error / http_<status> / timeout / extract_failed 等） */
   code: string;
+  /** 主錯誤訊息 */
   message: string;
+  /** 失敗的 URL（網路錯誤時） */
+  url?: string;
+  /** HTTP status code（4xx/5xx 時） */
+  httpStatus?: number;
+  /** 底層原因（ECONNRESET / ENOSPC / ETIMEDOUT 等） */
+  cause?: string;
+  /** stack trace 第一行（debug 用） */
+  stack?: string;
   timestamp: number;
 }
 
