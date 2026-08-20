@@ -200,7 +200,32 @@ function getAppDataDir() {
   return join(appdata, 'speak2t', 'models');
 }
 
+/**
+ * 自訂下載根目錄（commit: customModelPath 完整接通）
+ * 來源優先序：CLI --out-dir > 環境變數 OUT_DIR > undefined（fallback 用預設）
+ * 注意：這是「根目錄」，每個 preset 會裝在 `${OUT_DIR}/${preset}` 子目錄
+ */
+function getCustomRootDir() {
+  const cliArgIdx = process.argv.indexOf('--out-dir');
+  if (cliArgIdx !== -1) {
+    const val = process.argv[cliArgIdx + 1];
+    if (val && val.trim()) return val.trim();
+  }
+  if (process.env.OUT_DIR && process.env.OUT_DIR.trim()) {
+    return process.env.OUT_DIR.trim();
+  }
+  return undefined;
+}
+
+/**
+ * 取得模型下載目錄（commit: customModelPath 完整接通）
+ * 優先序：customRootDir > APPDATA/speak2t/models
+ */
 function getModelDir(preset) {
+  const customRoot = getCustomRootDir();
+  if (customRoot) {
+    return join(customRoot, preset);
+  }
   return join(getAppDataDir(), preset);
 }
 
@@ -839,6 +864,7 @@ async function main() {
   node scripts/download-model.mjs --tofu-list           → 列出所有 TOFU baseline
   node scripts/download-model.mjs --json sherpa-zh-en   → JSON 事件流（main 進程用）
   node scripts/download-model.mjs --force sherpa-zh-en  → 覆蓋已安裝的模型
+  node scripts/download-model.mjs --out-dir <path> sherpa-zh-en  → 裝到自訂根目錄 <path>/<preset>/
 
   SHA-256 驗證（2026-08-20 起統一為整體目錄 hash）：
   下載 / 解壓完會對整個模型目錄算 hash（所有檔 concat 再 hash 一次）

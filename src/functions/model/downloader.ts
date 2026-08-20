@@ -25,6 +25,7 @@ import { join } from 'node:path';
 import { app } from 'electron';
 import { appState } from '../../main/app-state';
 import { establishTofu, type VerificationResult } from './verifier';
+import { resolveModelPath, extractCustomRoot } from './paths';
 import type { TofuBaseline } from '../../shared/types';
 
 /** 模型基本資訊（UI 顯示用） */
@@ -205,13 +206,27 @@ export class ModelDownloader extends EventEmitter {
 
   /**
    * 列出所有可用模型（含本機是否已安裝）
+   *
+   * 路徑優先序（commit: customModelPath 完整接通）：
+   * 1. settings.customModelPath（自訂下載根目錄）→ join(customRoot, preset)
+   * 2. userData/models/<preset>（預設）
    */
   listModels(): ModelInfo[] {
+    const customRoot = this.getCustomRootDir();
+    const defaultRoot = join(app.getPath('userData'), 'models');
     return MODELS.map((m) => {
-      const path = join(app.getPath('userData'), 'models', m.preset);
+      const path = resolveModelPath(customRoot, defaultRoot, m.preset);
       const installed = existsSync(path) && statSync(path).isDirectory();
       return { ...m, path, installed };
     });
+  }
+
+  /**
+   * 取得自訂下載根目錄（從 settings.customModelPath 讀，trim + empty → undefined）
+   * 注意：這是「根目錄」，不是「單一模型路徑」。每個 preset 會裝在 `<root>/<preset>` 子目錄
+   */
+  private getCustomRootDir(): string | undefined {
+    return extractCustomRoot(appState.getSettings().customModelPath);
   }
 
   /**
@@ -241,7 +256,14 @@ export class ModelDownloader extends EventEmitter {
       [scriptPath, '--json', presetKey],
       {
         cwd: process.cwd(),
-        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, // 讓 Electron 當純 Node 跑
+        env: {
+          ...process.env,
+          ELECTRON_RUN_AS_NODE: '1', // 讓 Electron 當純 Node 跑
+          // 自訂下載根目錄（commit: customModelPath 完整接通）— CLI 會讀這個 env
+          ...(this.getCustomRootDir()
+            ? { OUT_DIR: this.getCustomRootDir() as string }
+            : {}),
+        },
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
       },
@@ -475,7 +497,10 @@ export class ModelDownloader extends EventEmitter {
    */
   private async establishAndSaveTofu(preset: string): Promise<void> {
     try {
-      const modelPath = join(app.getPath('userData'), 'models', preset);
+      // commit: customModelPath 完整接通 — TOFU 算 hash 也要用自訂下載根目錄
+      const customRoot = this.getCustomRootDir();
+      const defaultRoot = join(app.getPath('userData'), 'models');
+      const modelPath = resolveModelPath(customRoot, defaultRoot, preset);
       if (!existsSync(modelPath)) {
         console.warn(`[downloader] TOFU 建立失敗：模型目錄不存在 ${modelPath}`);
         return;

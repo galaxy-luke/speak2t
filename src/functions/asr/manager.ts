@@ -19,6 +19,7 @@ import { SherpaOnnxEngine } from './sherpa-onnx';
 import { WhisperCppEngine } from './whisper-cpp';
 import { postprocessWithReport } from '../postprocess';
 import { DEFAULT_RULES } from '../postprocess';
+import { resolveModelPath, extractCustomRoot } from '../model/paths';
 import type { AsrPostprocessedPayload, AsrEngineDegradedPayload } from '../../shared/api';
 
 export interface AsrManagerEvents {
@@ -194,13 +195,21 @@ export class AsrManager extends EventEmitter {
   }
 
   /**
-   * 解析模型根目錄
-   * 路徑：<userData>/models/<preset-dir>
+   * 解析模型路徑
+   *
+   * 路徑優先序（commit: customModelPath 完整接通）：
+   * 1. settings.customModelPath（自訂下載根目錄）→ join(customRoot, preset)
+   * 2. userData/models/<preset>（預設）
+   *
+   * 注意：sherpa-onnx engine / whisper-cpp engine 內部也會做 customPath > modelDir fallback，
+   * 這裡解析的結果會傳給 engine 作為 modelDir 預設值。
+   * 兩處邏輯保持一致避免路徑漂移（共用 src/functions/model/paths.ts 的 helper）。
    */
   private resolveModelDir(): string {
     const preset = this.settings.asrModelPreset;
-    const dirName = preset; // 目前 preset 名稱直接對應模型目錄名
-    return join(app.getPath('userData'), 'models', dirName);
+    const customRoot = extractCustomRoot(this.settings.customModelPath);
+    const defaultRoot = join(app.getPath('userData'), 'models');
+    return resolveModelPath(customRoot, defaultRoot, preset);
   }
 
   /**
