@@ -547,8 +547,19 @@ function wireTofuEvents(): void {
     const payload = toVerificationPayload(e.preset, e.result);
     broadcast(IPC.VERIFICATION_RESULT, payload);
     if (payload.status === 'mismatch') {
+      // 印清楚「哪個 baseline 對不上 + actual / expected」方便 user 排查
+      const expected =
+        payload.baselineKind === 'official'
+          ? payload.officialSha256
+          : payload.baselineKind === 'tofu'
+            ? payload.tofuSha256
+            : null;
+      const expectedShort = expected ? `${expected.slice(0, 16)}…` : '?';
       console.warn(
-        `[main] 模型校驗失敗：${e.preset} actual=${e.result.actualHash?.slice(0, 16)}… baseline=${payload.baselineKind}`,
+        `[main] 模型校驗失敗：${e.preset} ` +
+          `actual=${e.result.actualHash?.slice(0, 16)}… ` +
+          `expected(${payload.baselineKind})=${expectedShort} ` +
+          `→ 建議重新下載`,
       );
     }
   });

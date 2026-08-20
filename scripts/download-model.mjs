@@ -36,6 +36,15 @@ const JSON_MODE = process.argv.includes('--json');
 // 支援兩種類型：
 //   type='tarbz2' (預設) — 單一 tar.bz2 下載 + 解壓
 //   type='multifile'       — 多個獨立檔案（HF LFS 等），下載後直接放到 targetDir
+//
+// `sha256` 語義（**重要**）：
+// = **整體目錄 hash**，跟 src/functions/model/verifier.ts 的 hashModelPath() 演算法一致
+// = 對模型**整個目錄**的所有檔案（依檔名排序）各算 SHA-256，
+//   再 concat（用 '\n' 分隔）整個串再 SHA-256 一次
+// 為什麼用整體目錄 hash 而非 tar.bz2 整檔 / 各檔 hash：
+//   CLI 解壓完算整體 hash + app 啟動時 verifier 算整體 hash 兩者相同，
+//   不會出現「CLI 算 A、app 算 B 永遠 mismatch」的問題
+// 計算工具：node scripts/download-model.mjs --print-hash <key>
 const MODELS = {
   // P5 新預設：Luigi 繁中精調版（HF git LFS 多檔案，無壓縮）
   'luigi-x-asr-zh-tw-en-ft75m': {
@@ -46,31 +55,32 @@ const MODELS = {
     preset: 'luigi-x-asr-zh-tw-en-ft75m',
     /** 預期下載大小總計（bytes，UI 顯示用） */
     sizeBytes: 138200625, // 121039545 + 13877277 + 3228486 + 56317 = ~132MB
+    /**
+     * 整體目錄 hash（4 個檔 concat 再 hash 一次）
+     * 2026-08-20 算：40e563f8...d86060f
+     */
+    sha256: '40e563f8d7acc4bc22dfd8483e65ba40d68f4f9fc6c424a95d37f87cac86060f',
     /** 4 個獨立檔案（HF git LFS） */
     files: [
       {
         url: 'https://huggingface.co/Luigi/x-asr-zh-tw-en-streaming-ft75m/resolve/main/encoder.int8.onnx',
         filename: 'encoder.int8.onnx',
         sizeBytes: 121039545,
-        sha256: null, // TODO: 首次下載後用 Get-FileHash 算
       },
       {
         url: 'https://huggingface.co/Luigi/x-asr-zh-tw-en-streaming-ft75m/resolve/main/decoder.onnx',
         filename: 'decoder.onnx',
         sizeBytes: 13877277,
-        sha256: null, // TODO: 首次下載後用 Get-FileHash 算
       },
       {
         url: 'https://huggingface.co/Luigi/x-asr-zh-tw-en-streaming-ft75m/resolve/main/joiner.int8.onnx',
         filename: 'joiner.int8.onnx',
         sizeBytes: 3228486,
-        sha256: null, // TODO: 首次下載後用 Get-FileHash 算
       },
       {
         url: 'https://huggingface.co/Luigi/x-asr-zh-tw-en-streaming-ft75m/resolve/main/tokens.txt',
         filename: 'tokens.txt',
         sizeBytes: 56317,
-        sha256: null, // TODO: 首次下載後用 Get-FileHash 算
       },
     ],
   },
@@ -85,9 +95,11 @@ const MODELS = {
     preset: 'sherpa-onnx-x-asr-480ms-streaming-zipformer-transducer-zh-en-punct-int8-2026-06-05',
     sizeBytes: 133895136,
     /**
-     * GitHub asset digest（官方）: 78796cd435de82b6bb413e5c3c3d5b4dcb9f7675ddfd33deed6fe1b9e1de0c45
+     * 整體目錄 hash（解壓後目錄所有檔 concat 再 hash 一次）
+     * TODO: 首次下載後用 `node scripts/download-model.mjs --print-hash x-asr-480ms-punct` 算回填
+     * null = 該模型還沒 baseline（首次下載後自動建 TOFU 存進 settings）
      */
-    sha256: '78796cd435de82b6bb413e5c3c3d5b4dcb9f7675ddfd33deed6fe1b9e1de0c45',
+    sha256: null, // TODO: 首次下載後回填
   },
   // 既有：sherpa-zh-en 經典版 v2023
   'sherpa-zh-en': {
@@ -104,12 +116,11 @@ const MODELS = {
     /** 預期下載大小（bytes，用於 UI 顯示） */
     sizeBytes: 357564000,
     /**
-     * tar.bz2 完整檔案的 SHA-256（hex lowercase）。
-     * 用途：下載完算 hash 比對，確保檔案完整沒被截斷或竄改。
-     * 來源：本機下載一次算 baseline（sherpa-onnx release 沒附 .sha256）。
-     * 之後可改用 CI 從 release 自動算。
+     * 整體目錄 hash（解壓後目錄所有檔 concat 再 hash 一次）
+     * 變更歷史：原本是 tar.bz2 整檔 hash，2026-08-20 改為整體目錄 hash 與 verifier 演算法一致
+     * 2026-08-20 算：58560cb1...f9620c（10 個檔）
      */
-    sha256: '27ffbd9ee24ad186d99acc2f6354d7992b27bcab490812510665fa8f9389c5f8',
+    sha256: '58560cb167aaa25b4aa06001f581be4fabb35cab12f3f26369b080f725f9620c',
   },
   'whisper-small': {
     name: 'whisper-small (ggml)',
@@ -121,11 +132,11 @@ const MODELS = {
     preset: 'whisper-small',
     sizeBytes: 462422000,
     /**
-     * ggml-small.bin 完整檔案的 SHA-256（hex lowercase）。
-     * 來源：huggingface.co/ggerganov/whisper.cpp 官方 LFS。
-     * 待首次下載後用 Get-FileHash 校對後填入。
+     * 整體 hash（單一檔案，hashModelPath 對單檔直接算 SHA-256）
+     * TODO: 首次下載後用 `node scripts/download-model.mjs --print-hash whisper-small` 算回填
+     * null = 該模型還沒 baseline（首次下載後自動建 TOFU 存進 settings）
      */
-    sha256: null, // TODO: 首次下載後填入
+    sha256: null, // TODO: 首次下載後回填
   },
 };
 
@@ -416,62 +427,52 @@ async function downloadFile(url, destPath) {
 }
 
 /**
- * 計算檔案 SHA-256（streaming，避免整檔讀進記憶體）
+ * 對解壓 / 下載完的整體模型目錄算 hash 跟 MODELS[preset].sha256 比對
+ *
+ * 語義：MODELS[preset].sha256 = 整體目錄 hash（與 verifier.ts 的 hashModelPath() 演算法一致）
+ *
+ * 行為：
+ * - expected 不為 null 且對得起來 → emit 'verified' event + 回傳 ok=true
+ * - expected 不為 null 但對不起來 → 拋錯（呼叫端負責刪目錄）
+ * - expected 為 null → emit 'hash' event (skipped: true) → main 端建 TOFU
+ *
+ * @param {string} modelPath - 解壓後的模型目錄路徑
+ * @param {string|null} expected - MODELS[preset].sha256
  */
-function sha256OfFile(filePath) {
-  return new Promise((resolve, reject) => {
-    const hash = createHash('sha256');
-    const stream = createReadStream(filePath);
-    stream.on('data', (chunk) => hash.update(chunk));
-    stream.on('end', () => resolve(hash.digest('hex')));
-    stream.on('error', (err) => reject(err));
-  });
-}
-
-/**
- * 下載完後驗證 SHA-256
- * - expected 為 null → 跳過（僅計算並報告實際 hash）
- * - 對上 → 回傳 { ok: true, actual }
- * - 不對 → 刪除檔案 + 拋錯（emitError）
- * @param {string} [displayName] - multi-file 模式下顯示檔名用（例: "encoder.int8.onnx"）
- */
-async function verifyDownloadedFile(filePath, expected, displayName) {
-  const label = displayName ? `${displayName} (${filePath})` : filePath;
+async function verifyExtractedModel(modelPath, expected) {
   if (JSON_MODE) {
-    emit({ event: 'phase', phase: 'verifying', message: `驗證 SHA-256：${label}` });
+    emit({ event: 'phase', phase: 'verifying', message: `校驗整體目錄 SHA-256：${modelPath}` });
   } else {
-    console.log(`\n驗證 SHA-256：${label}`);
+    console.log(`\n校驗整體目錄 SHA-256：${modelPath}`);
   }
-  const actual = await sha256OfFile(filePath);
-  if (JSON_MODE) {
-    emit({ event: 'hash', algorithm: 'sha256', actual });
+  const result = await computeModelHash(modelPath);
+  if (expected) {
+    if (result.hash === expected) {
+      if (JSON_MODE) {
+        emit({ event: 'verified', algorithm: 'sha256', actual: result.hash, expected, scope: 'directory' });
+      } else {
+        console.log(`  ✓ 整體目錄 SHA-256 校驗通過`);
+        console.log(`    預期：${expected}`);
+        console.log(`    實際：${result.hash}`);
+      }
+      return { ok: true, actual: result.hash, expected, skipped: false };
+    } else {
+      const msg = `整體目錄 SHA-256 驗證失敗：${modelPath}\n  預期 ${expected}\n  實際 ${result.hash}\n  檔案可能被竊改或磁碟損壞`;
+      const err = new Error(msg);
+      err.expected = expected;
+      err.actual = result.hash;
+      throw err;
+    }
   } else {
-    console.log(`  實際：${actual}`);
-    if (expected) console.log(`  預期：${expected}`);
-  }
-  if (!expected) {
     if (JSON_MODE) {
-      emit({ event: 'hash', algorithm: 'sha256', actual, expected: null, skipped: true });
+      emit({ event: 'hash', algorithm: 'sha256', actual: result.hash, expected: null, skipped: true, scope: 'directory' });
     } else {
       console.log(`  ⚠️  跳過校驗（無 baseline hash，僅計算並記錄）`);
+      console.log(`    整體目錄 SHA-256：${result.hash}`);
+      console.log(`    總大小：${(result.size / 1024 / 1024).toFixed(1)} MB`);
     }
-    return { ok: true, actual, expected: null, skipped: true };
+    return { ok: true, actual: result.hash, expected: null, skipped: true };
   }
-  if (actual.toLowerCase() !== expected.toLowerCase()) {
-    // 算 hash 失敗 → 刪除 corrupt 檔，避免後續解壓/使用壞檔
-    if (existsSync(filePath)) {
-      rmSync(filePath, { force: true });
-    }
-    throw new Error(
-      `SHA-256 驗證失敗：${label} 預期 ${expected}，實際 ${actual}（檔案可能損毀或被竄改，已刪除）`
-    );
-  }
-  if (JSON_MODE) {
-    emit({ event: 'verified', algorithm: 'sha256', actual, expected });
-  } else {
-    console.log(`  ✓ SHA-256 驗證通過`);
-  }
-  return { ok: true, actual, expected, skipped: false };
 }
 
 /**
@@ -523,7 +524,12 @@ function cleanupDir(dir, patterns) {
 
 /**
  * Multi-file 模型下載（如 Luigi HF LFS）
- * 依序下載每個檔案到 targetDir，每個檔案可選驗證 SHA-256
+ * 依序下載每個檔案到 targetDir
+ *
+ * 注意：不在這裡校驗 per-file hash。所有校驗統一在「下載完」後對**整個目錄**算 hash 跟
+ * MODELS[preset].sha256 比對（與 verifier.ts 演算法一致），避免 per-file hash 跟整體 hash
+ * 永遠對不起來的問題
+ *
  * 進度回報：累計 bytes / totalBytes
  */
 async function downloadMultifileModel(model, targetDir, tmpDir) {
@@ -538,7 +544,6 @@ async function downloadMultifileModel(model, targetDir, tmpDir) {
   }
 
   let downloaded = 0;
-  const fileHashes = {}; // filename → { actual, expected, skipped }
 
   for (let i = 0; i < model.files.length; i++) {
     if (cancelled) {
@@ -576,10 +581,6 @@ async function downloadMultifileModel(model, targetDir, tmpDir) {
     }
     downloaded += file.sizeBytes;
 
-    // SHA-256 校驗（per-file）
-    const verifyResult = await verifyDownloadedFile(tmpFile, file.sha256 ?? null, file.filename);
-    fileHashes[file.filename] = verifyResult;
-
     // 從 tmp 搬到 targetDir
     if (existsSync(finalFile)) {
       rmSync(finalFile, { force: true });
@@ -590,7 +591,7 @@ async function downloadMultifileModel(model, targetDir, tmpDir) {
     }
   }
 
-  return { fileHashes, total };
+  return { total };
 }
 
 /**
@@ -742,7 +743,8 @@ async function main() {
       process.exit(1);
     }
     const model = MODELS[preset];
-    const modelPath = getModelDir(preset);
+    // 修正：用 model.preset（解壓後目錄名）而不是 key
+    const modelPath = getModelDir(model.preset);
     if (!existsSync(modelPath)) {
       console.error(`錯誤：模型未下載 ${modelPath}`);
       process.exit(2);
@@ -750,7 +752,6 @@ async function main() {
     const result = await computeModelHash(modelPath);
     const settings = loadSettingsFromDisk();
     const tofuMap = settings.tofuBaselines ?? {};
-    const tofu = Object.values(tofuMap).find((t) => t.sha256 === result.hash) ?? null;
     if (JSON_MODE) {
       process.stdout.write(
         JSON.stringify({
@@ -789,6 +790,44 @@ async function main() {
     return;
   }
 
+  // --print-hash <preset>（2026-08-20：算已下載模型的整體目錄 hash 給 user 回填 baseline 用）
+  // 跟 --verify 類似但只印 hash，不比對、不需要 baseline
+  const printHashIdx = process.argv.indexOf('--print-hash');
+  if (printHashIdx !== -1) {
+    const preset = process.argv[printHashIdx + 1];
+    if (!preset || !MODELS[preset]) {
+      console.error(`錯誤：--print-hash 需要指定有效模型 key（可用 --list 看）`);
+      process.exit(1);
+    }
+    const model = MODELS[preset];
+    const modelPath = getModelDir(model.preset);
+    if (!existsSync(modelPath)) {
+      console.error(`錯誤：模型未下載 ${modelPath}`);
+      console.error(`  請先下載：node scripts/download-model.mjs ${preset}`);
+      process.exit(2);
+    }
+    const result = await computeModelHash(modelPath);
+    if (JSON_MODE) {
+      process.stdout.write(
+        JSON.stringify({
+          event: 'printHash',
+          preset,
+          hash: result.hash,
+          size: result.size,
+          modelPath,
+        }) + '\n',
+      );
+    } else {
+      console.log(`${preset} 整體目錄 hash：`);
+      console.log(`  ${result.hash}`);
+      console.log(`  總大小：${(result.size / 1024 / 1024).toFixed(1)} MB`);
+      console.log(`  路徑：${modelPath}`);
+      console.log();
+      console.log(`回填到 MODELS：把上面的 hash 填進 src/functions/model/downloader.ts 跟 scripts/download-model.mjs`);
+    }
+    return;
+  }
+
   // --help
   if (process.argv.includes('--help') || process.argv.includes('-h')) {
     console.log(`用法：
@@ -796,15 +835,22 @@ async function main() {
   node scripts/download-model.mjs sherpa-zh-en          → 直接下載
   node scripts/download-model.mjs --list                → 列出可用模型
   node scripts/download-model.mjs --verify sherpa-zh-en → 校驗單一已下載模型
+  node scripts/download-model.mjs --print-hash sherpa-zh-en  → 算已下載模型的整體 hash
   node scripts/download-model.mjs --tofu-list           → 列出所有 TOFU baseline
   node scripts/download-model.mjs --json sherpa-zh-en   → JSON 事件流（main 進程用）
   node scripts/download-model.mjs --force sherpa-zh-en  → 覆蓋已安裝的模型
 
-  SHA-256 驗證：
-  下載完會比對 MODELS.sha256（若未填則只算不驗證）。驗證失敗會自動刪除 corrupt 檔。
+  SHA-256 驗證（2026-08-20 起統一為整體目錄 hash）：
+  下載 / 解壓完會對整個模型目錄算 hash（所有檔 concat 再 hash 一次）
+  跟 MODELS[preset].sha256 比對。對不起來會刪除整個目錄。
   TOFU（Trust On First Use）：
-  對沒官方 baseline 的模型（Luigi / whisper-small），下載完成時自動建 TOFU baseline
+  對沒官方 baseline 的模型（Luigi 已填 / x-asr / whisper 還沒），下載完成時自動建 TOFU baseline
   存進 settings.json。日後啟動時自動重算比對，偵測檔案被竊改 / 磁碟損壞。
+
+  --print-hash 用途：
+  對已下載模型算整體 hash，給 user 回填到 MODELS[preset].sha256 用。
+  例：下載 x-asr 480ms 後，node scripts/download-model.mjs --print-hash x-asr-480ms-punct
+  拿 hash 填回 MODELS。
 `);
     return;
   }
@@ -917,13 +963,43 @@ async function main() {
       process.exit(1);
     }
 
-    const durationMs = Date.now() - downloadStart;
-    if (JSON_MODE) {
-      emit({ event: 'done', path: targetDir, durationMs, sha256: null });
-    } else {
-      console.log(`\n✅ 模型下載完成！`);
-      console.log(`   路徑：${targetDir}`);
-      console.log(`\n請重啟 Speak2T app 載入模型。`);
+    // 整體目錄 hash 校驗
+    try {
+      const verifyResult = await verifyExtractedModel(targetDir, model.sha256 ?? null);
+      const durationMs = Date.now() - downloadStart;
+      if (JSON_MODE) {
+        emit({
+          event: 'done',
+          path: targetDir,
+          durationMs,
+          sha256: verifyResult.actual,
+          skipped: verifyResult.skipped,
+        });
+      } else {
+        console.log(`\n✅ 模型下載完成！`);
+        console.log(`   路徑：${targetDir}`);
+        console.log(`\n請重啟 Speak2T app 載入模型。`);
+      }
+    } catch (err) {
+      if (cancelled) {
+        rmSync(targetDir, { recursive: true, force: true });
+        process.exit(130);
+      }
+      // 整體目錄 hash 對不起來 → 刪除整個目錄
+      rmSync(targetDir, { recursive: true, force: true });
+      if (JSON_MODE) {
+        if (err.actual && err.expected) {
+          emitError(`校驗失敗：${err.message}`, 'checksum_mismatch', {
+            expected: err.expected,
+            actual: err.actual,
+          });
+        } else {
+          emitError(`校驗失敗：${err.message}`, 'verify_failed');
+        }
+      } else {
+        console.error(`\n✗ ${err.message}`);
+      }
+      process.exit(3);
     }
     return;
   }
@@ -959,36 +1035,9 @@ async function main() {
     process.exit(1);
   }
 
-  // SHA-256 校驗（若 MODELS 有 sha256 就強制驗證；沒有就只算 hash 給 UI 顯示）
-  try {
-    const result = await verifyDownloadedFile(tmpArchive, model.sha256 ?? null);
-    if (!JSON_MODE) {
-      if (result.skipped) {
-        console.log(`（未指定預期 hash，僅顯示實際 hash 供參考）`);
-      } else {
-        console.log(`✓ SHA-256 校驗通過`);
-      }
-    }
-  } catch (err) {
-    if (cancelled) {
-      if (existsSync(tmpArchive)) rmSync(tmpArchive, { force: true });
-      process.exit(130);
-    }
-    if (JSON_MODE) {
-      emitError(`校驗失敗：${err.message}`, 'checksum_mismatch', {
-        url: model.url,
-        expected: model.sha256,
-      });
-    } else {
-      console.error(`\n✗ ${err.message}`);
-    }
-    if (existsSync(tmpArchive)) {
-      rmSync(tmpArchive, { force: true });
-    }
-    process.exit(3);
-  }
-
   // 解壓或搬移
+  let extractedSha256 = null;
+  let extractedSkipped = false;
   try {
     if (model.archive === 'tar.bz2') {
       // 先解到 staging dir（避免直接寫進 targetDir 後被 rmSync 連帶刪除）
@@ -1045,13 +1094,26 @@ async function main() {
       }
     }
 
+    // ===== 整體目錄 hash 校驗（與 verifier.ts 演算法一致）=====
+    // 對解壓後 / 搬移後的整個目錄算 SHA-256
+    // 對 MODELS[preset].sha256 比對（若無則只算 → emit 'hash' skipped: true → main 端建 TOFU）
+    const verifyResult = await verifyExtractedModel(targetDir, model.sha256 ?? null);
+    extractedSha256 = verifyResult.actual;
+    extractedSkipped = verifyResult.skipped;
+
     const durationMs = Date.now() - downloadStart;
     // 成功後清掉 tmp 檔（避免磁碟累積）
     if (existsSync(tmpArchive)) {
       rmSync(tmpArchive, { force: true });
     }
     if (JSON_MODE) {
-      emit({ event: 'done', path: targetDir, durationMs, sha256: model.sha256 ?? null });
+      emit({
+        event: 'done',
+        path: targetDir,
+        durationMs,
+        sha256: extractedSha256,
+        skipped: extractedSkipped,
+      });
     } else {
       console.log(`\n✅ 模型下載完成！`);
       console.log(`   路徑：${targetDir}`);
@@ -1060,17 +1122,29 @@ async function main() {
   } catch (err) {
     if (cancelled) {
       if (existsSync(tmpArchive)) rmSync(tmpArchive, { force: true });
+      if (existsSync(targetDir)) rmSync(targetDir, { recursive: true, force: true });
       process.exit(130);
     }
+    // 整體目錄 hash 對不起來 → 刪除整個目錄，避免 corrupt 殘留
+    if (existsSync(targetDir)) {
+      rmSync(targetDir, { recursive: true, force: true });
+    }
     if (JSON_MODE) {
-      emitError(`解壓失敗：${err.message}`, 'extract_failed');
+      if (err.actual && err.expected) {
+        emitError(`校驗失敗：${err.message}`, 'checksum_mismatch', {
+          expected: err.expected,
+          actual: err.actual,
+        });
+      } else {
+        emitError(`解壓失敗：${err.message}`, 'extract_failed');
+      }
     } else {
-      console.error(`\n✗ 解壓失敗：${err.message}`);
+      console.error(`\n✗ ${err.message}`);
     }
     if (existsSync(tmpArchive)) {
       rmSync(tmpArchive, { force: true });
     }
-    process.exit(2);
+    process.exit(3);
   }
 }
 

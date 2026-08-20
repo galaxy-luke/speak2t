@@ -8,7 +8,14 @@
  * - Singleton（一次只允許一個下載，避免吃滿資源）
  * - 透過 `process.execPath` + `scripts/download-model.mjs` 啟動（path 安全）
  * - 取消：發 SIGTERM 給 child process，給 3 秒 grace，否則 SIGKILL
- * - TOFU：下載完成時若 preset 沒官方 SHA-256 baseline，自動算 TOFU 存進 settings
+ * - TOFU：下載完成時若 preset 沒官方 baseline，自動算整體目錄 hash 存進 settings
+ *
+ * Hash 語義（**重要**）：
+ * - `MODELS[preset].sha256` 與 `verifier.hashModelPath()` 演算法一致
+ * - 算法：對模型**整個目錄**的所有檔案（依檔名排序）各算 SHA-256，
+ *         再 concat（用 '\n' 分隔）整個串再 SHA-256 一次
+ * - 為什麼用整體目錄 hash 而非 tar.bz2 整檔：CLI 解壓完直接算 + app 啟動時校驗都用同一個演算法，
+ *   不會有「CLI 算 A、app 算 B 永遠 mismatch」的問題
  */
 
 import { EventEmitter } from 'node:events';
@@ -144,10 +151,11 @@ const MODELS: Omit<ModelInfo, 'installed' | 'path'>[] = [
     preset: 'luigi-x-asr-zh-tw-en-ft75m',
     sizeBytes: 138_200_625,
     /**
-     * Luigi HF git LFS 4 個檔案都不附官方 digest（要自算）。
-     * 等首次下載後用 Get-FileHash 算出來回填到 scripts/download-model.mjs。
+     * 整體目錄 hash（4 個檔 concat 再 hash 一次）
+     * 用 `node scripts/download-model.mjs --print-hash luigi-x-asr-zh-tw-en-ft75m` 計算並回填
+     * 2026-08-20 算：4 個檔
      */
-    sha256: null, // TODO: 首次下載後用 Get-FileHash 算
+    sha256: '40e563f8d7acc4bc22dfd8483e65ba40d68f4f9fc6c424a95d37f87cac86060f',
   },
   {
     key: 'x-asr-480ms-punct',
@@ -156,9 +164,11 @@ const MODELS: Omit<ModelInfo, 'installed' | 'path'>[] = [
     preset: 'sherpa-onnx-x-asr-480ms-streaming-zipformer-transducer-zh-en-punct-int8-2026-06-05',
     sizeBytes: 133_895_136,
     /**
-     * GitHub asset digest（官方）: 78796cd435de82b6bb413e5c3c3d5b4dcb9f7675ddfd33deed6fe1b9e1de0c45
+     * 整體目錄 hash（解壓後目錄所有檔 concat 再 hash 一次）
+     * TODO: 首次下載後用 `node scripts/download-model.mjs --print-hash x-asr-480ms-punct` 算回填
+     * 沒填 = 該模型還沒建立 baseline（首次下載後會自動建 TOFU 存進 settings）
      */
-    sha256: '78796cd435de82b6bb413e5c3c3d5b4dcb9f7675ddfd33deed6fe1b9e1de0c45',
+    sha256: null, // TODO: 首次下載後回填
   },
   {
     key: 'sherpa-zh-en',
@@ -166,7 +176,12 @@ const MODELS: Omit<ModelInfo, 'installed' | 'path'>[] = [
     description: 'sherpa-onnx 串流模型（中英混講，~340 MB，無標點）',
     preset: 'sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20',
     sizeBytes: 357_564_000,
-    sha256: '27ffbd9ee24ad186d99acc2f6354d7992b27bcab490812510665fa8f9389c5f8',
+    /**
+     * 整體目錄 hash（解壓後目錄所有檔 concat 再 hash 一次）
+     * 變更歷史：原本是 tar.bz2 整檔 hash，2026-08-20 改為整體目錄 hash 與 verifier 演算法一致
+     * 2026-08-20 算：10 個檔
+     */
+    sha256: '58560cb167aaa25b4aa06001f581be4fabb35cab12f3f26369b080f725f9620c',
   },
   {
     key: 'whisper-small',
@@ -174,7 +189,12 @@ const MODELS: Omit<ModelInfo, 'installed' | 'path'>[] = [
     description: 'Whisper.cpp 離線模型（中英，~460 MB）',
     preset: 'whisper-small',
     sizeBytes: 462_422_000,
-    sha256: null, // TODO: 首次下載後用 Get-FileHash 算出來回填
+    /**
+     * 整體 hash（單一檔案，hashModelPath 對單檔直接算 SHA-256）
+     * TODO: 首次下載後用 `node scripts/download-model.mjs --print-hash whisper-small` 算回填
+     * 沒填 = 該模型還沒建立 baseline（首次下載後會自動建 TOFU 存進 settings）
+     */
+    sha256: null, // TODO: 首次下載後回填
   },
 ];
 
