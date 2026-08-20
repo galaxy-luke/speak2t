@@ -892,6 +892,23 @@ kbd {
   color: #ffb8b8;
 }
 
+.model-msg.warn {
+  background: #3a2e1e;
+  color: #ffd9a8;
+}
+
+.model-sha256.verified {
+  color: #88dd88;
+  font-size: 11px;
+  font-weight: normal;
+}
+
+.model-sha256.unverified {
+  color: #ddaa66;
+  font-size: 11px;
+  font-weight: normal;
+}
+
 .download-progress {
   margin-top: 10px;
 }

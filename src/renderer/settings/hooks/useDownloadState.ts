@@ -38,11 +38,12 @@ export type DownloadStatus =
     }
   | { kind: 'cancelled'; preset: string; timestamp: number }
   | {
-      /** SHA-256 校驗通過（暫態，下一步會 emit complete） */
+      /** SHA-256 校驗結果（暫態，下一步會 emit complete） */
       kind: 'verified';
       preset: string;
       actual: string;
       expected: string | null;
+      skipped: boolean;
       timestamp: number;
     };
 
@@ -127,6 +128,7 @@ export function useDownloadState(): UseDownloadStateReturn {
         preset: data.preset,
         actual: data.actual,
         expected: data.expected,
+        skipped: data.skipped,
         timestamp: data.timestamp,
       });
     });

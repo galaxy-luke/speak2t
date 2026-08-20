@@ -75,8 +75,10 @@ export interface DownloadVerifiedEvent {
   algorithm: 'sha256';
   /** 實際算出的 hash（hex lowercase） */
   actual: string;
-  /** 預期 hash（MODELS.sha256，若無則 null） */
+  /** 預期 hash（MODELS.sha256，若無則 null = 跳過比對） */
   expected: string | null;
+  /** true = 跳過比對（沒 baseline），false = 比對通過 */
+  skipped: boolean;
 }
 
 export interface ModelDownloaderEvents {
@@ -320,17 +322,19 @@ export class ModelDownloader extends EventEmitter {
           preset,
           algorithm: 'sha256',
           actual: e.actual as string,
-          expected: null, // hash 事件沒有 expected，比對結果看下一個 verified 或 error
+          expected: (e.expected as string | null) ?? null,
+          skipped: (e.skipped as boolean) ?? true,
         } as DownloadVerifiedEvent);
         break;
 
       case 'verified':
-        // 校驗通過
+        // 校驗通過（actual === expected）
         this.emit('verified', {
           preset,
           algorithm: 'sha256',
           actual: e.actual as string,
-          expected: e.actual as string, // verified 事件 = actual 對得起 expected
+          expected: (e.expected as string | null) ?? null,
+          skipped: false,
         } as DownloadVerifiedEvent);
         break;
 

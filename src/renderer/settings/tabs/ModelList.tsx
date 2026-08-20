@@ -58,9 +58,13 @@ function ModelItem({ model, status, onDownload, onCancel }: {
         <div className="model-info">
           <div className="model-name">
             {model.installed ? '✅' : '📦'} {model.name}
-            {model.sha256 && (
-              <span className="model-sha256" title={`SHA-256: ${model.sha256}`}>
+            {model.sha256 ? (
+              <span className="model-sha256 verified" title={`SHA-256: ${model.sha256}`}>
                 {' '}🔒 已驗證
+              </span>
+            ) : (
+              <span className="model-sha256 unverified" title="無 baseline SHA-256，無法校驗完整性">
+                {' '}⚠️ 未校驗
               </span>
             )}
           </div>
@@ -103,9 +107,16 @@ function ModelItem({ model, status, onDownload, onCancel }: {
         <DownloadProgressView progress={status.progress} />
       )}
 
-      {isJustVerified && status.kind === 'verified' && (
+      {isJustVerified && status.kind === 'verified' && !status.skipped && (
         <p className="model-msg success">
-          🔒 SHA-256 校驗通過 — <code className="code-mono">{status.actual.slice(0, 16)}…</code>
+          🔒 SHA-256 校驗通過 — <code className="code-mono">{status.actual.slice(0, 16)}…{status.actual.slice(-8)}</code>
+        </p>
+      )}
+
+      {isJustVerified && status.kind === 'verified' && status.skipped && (
+        <p className="model-msg warn">
+          ⚠️ 未校驗（無 baseline SHA-256）— 實際：
+          <code className="code-mono">{status.actual.slice(0, 16)}…{status.actual.slice(-8)}</code>
         </p>
       )}
 

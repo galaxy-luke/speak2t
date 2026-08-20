@@ -331,6 +331,11 @@ async function verifyDownloadedFile(filePath, expected) {
     if (expected) console.log(`  預期：${expected}`);
   }
   if (!expected) {
+    if (JSON_MODE) {
+      emit({ event: 'hash', algorithm: 'sha256', actual, expected: null, skipped: true });
+    } else {
+      console.log(`  ⚠️  跳過校驗（無 baseline hash，僅計算並記錄）`);
+    }
     return { ok: true, actual, expected: null, skipped: true };
   }
   if (actual.toLowerCase() !== expected.toLowerCase()) {
@@ -343,7 +348,7 @@ async function verifyDownloadedFile(filePath, expected) {
     );
   }
   if (JSON_MODE) {
-    emit({ event: 'verified', algorithm: 'sha256', actual });
+    emit({ event: 'verified', algorithm: 'sha256', actual, expected });
   } else {
     console.log(`  ✓ SHA-256 驗證通過`);
   }

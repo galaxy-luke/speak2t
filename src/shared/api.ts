@@ -224,14 +224,16 @@ export interface DownloadErrorPayload {
   timestamp: number;
 }
 
-/** SHA-256 校驗事件（verify 通過時） */
+/** SHA-256 校驗事件（verify 通過時 / 跳過時） */
 export interface DownloadVerifiedPayload {
   preset: string;
   algorithm: 'sha256';
   /** 實際算出的 hash（hex lowercase） */
   actual: string;
-  /** 預期 hash（若無則 null = 只算不算） */
+  /** 預期 hash（若無則 null = 跳過比對） */
   expected: string | null;
+  /** true = 跳過比對（沒 baseline），false = 比對通過 */
+  skipped: boolean;
   timestamp: number;
 }
 
