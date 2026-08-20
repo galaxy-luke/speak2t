@@ -58,7 +58,13 @@ export function postprocessWithReport(
   options?: PostprocessOptions,
 ): PostprocessResult {
   if (!input) {
-    return { original: input, processed: input, appliedRules: [], skippedRules: [] };
+    return {
+      original: input,
+      processed: input,
+      appliedRules: [],
+      skippedRules: [],
+      changed: false,
+    };
   }
 
   const disabled = new Set(options?.disabledRules ?? []);
@@ -78,5 +84,11 @@ export function postprocessWithReport(
     }
   }
 
-  return { original: input, processed: text, appliedRules, skippedRules };
+  return {
+    original: input,
+    processed: text,
+    appliedRules,
+    skippedRules,
+    changed: text !== input,
+  };
 }

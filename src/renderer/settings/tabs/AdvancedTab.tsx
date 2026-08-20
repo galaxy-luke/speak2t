@@ -9,6 +9,7 @@
 
 import { useState } from 'react';
 import { DEFAULT_SETTINGS, type AppSettings } from '../../../shared/types';
+import { PostprocessPreview } from './PostprocessPreview';
 
 interface Props {
   saved: AppSettings | null;
@@ -46,6 +47,12 @@ export function AdvancedTab({ saved, onReset }: Props) {
           設定儲存於 <code>%APPDATA%\speak2t\settings.json</code>，模型儲存於{' '}
           <code>%APPDATA%\speak2t\models\&lt;preset&gt;\</code>。
         </p>
+      </section>
+
+      <section className="info-box">
+        <h3>後處理規則預覽（P3 Stage 3）</h3>
+        <p>預覽 5 句範例套用 postprocess 規則前後的對比。</p>
+        <PostprocessPreview />
       </section>
 
       <section className="info-box danger-zone">

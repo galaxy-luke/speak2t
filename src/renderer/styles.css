@@ -942,3 +942,128 @@ kbd {
   color: #aaa;
   text-align: center;
 }
+
+/* ===== P3 Stage 3: 後處理預覽 / 對比顯示 ===== */
+
+.postprocess-compare {
+  margin-top: 12px;
+  padding: 12px;
+  background: #1a1a1a;
+  border: 1px solid #2a4a6a;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.postprocess-original,
+.postprocess-processed {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.postprocess-original code,
+.postprocess-processed code {
+  flex: 1;
+  color: #ffd966;
+  font-size: 12px;
+  word-break: break-word;
+}
+
+.postprocess-arrow {
+  text-align: center;
+  color: #4a9eff;
+  font-size: 11px;
+  margin: 6px 0;
+  font-family: 'Cascadia Code', monospace;
+}
+
+.postprocess-rules {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #888;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.rule-chip {
+  display: inline-block;
+  padding: 2px 6px;
+  background: #2a3a4a;
+  color: #88bbff;
+  border-radius: 3px;
+  font-size: 10px;
+  font-family: 'Cascadia Code', monospace;
+}
+
+.postprocess-preview {
+  margin-top: 12px;
+}
+
+.preview-controls {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.preview-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.preview-item {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.preview-label {
+  font-size: 12px;
+  color: #888;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.preview-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.preview-tag {
+  flex-shrink: 0;
+  display: inline-block;
+  padding: 2px 6px;
+  background: #2a2a2a;
+  color: #888;
+  border-radius: 3px;
+  font-size: 10px;
+  min-width: 40px;
+  text-align: center;
+}
+
+.preview-tag.tag-processed {
+  background: #1e3a1e;
+  color: #b8e6b8;
+}
+
+.preview-text {
+  font-size: 12px;
+  color: #e0e0e0;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  word-break: break-word;
+}
+
+.preview-rules {
+  margin-top: 6px;
+  font-size: 10px;
+  color: #888;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}

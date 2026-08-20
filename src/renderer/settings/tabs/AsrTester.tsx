@@ -14,6 +14,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AppSettings } from '../../../shared/types';
 import { useAsrEvents } from '../hooks/useAsrEvents';
+import type { AsrPostprocessedPayload } from '../../../shared/api';
 
 interface Props {
   settings: AppSettings;
@@ -23,6 +24,7 @@ export function AsrTester({ settings }: Props) {
   const [isRecording, setIsRecording] = useState(false);
   const [chunkCount, setChunkCount] = useState(0);
   const [micError, setMicError] = useState<string | null>(null);
+  const [postprocessReport, setPostprocessReport] = useState<AsrPostprocessedPayload | null>(null);
   const { level, partial, final, history, error } = useAsrEvents();
 
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -34,6 +36,18 @@ export function AsrTester({ settings }: Props) {
     return () => {
       stopMicInternal();
     };
+  }, []);
+
+  // P3 Stage 3：訂閱 ASR_POSTPROCESSED 顯示後處理結果
+  useEffect(() => {
+    const off = window.speak2t.onAsrPostprocessed((data) => {
+      setPostprocessReport(data);
+      // 5 秒後自動清掉（讓下次有空間）
+      setTimeout(() => {
+        setPostprocessReport((prev) => (prev?.timestamp === data.timestamp ? null : prev));
+      }, 10000);
+    });
+    return off;
   }, []);
 
   async function startMic() {
@@ -146,6 +160,24 @@ export function AsrTester({ settings }: Props) {
       {final && (
         <div className="asr-final">
           <span className="label">final:</span> {final}
+        </div>
+      )}
+
+      {postprocessReport && postprocessReport.changed && (
+        <div className="postprocess-compare">
+          <div className="postprocess-original">
+            <span className="label">ASR 原始</span> <code>{postprocessReport.original}</code>
+          </div>
+          <div className="postprocess-arrow">↓ postprocess</div>
+          <div className="postprocess-processed">
+            <span className="label">注入版本</span> <code>{postprocessReport.processed}</code>
+          </div>
+          <div className="postprocess-rules">
+            套用規則：
+            {postprocessReport.appliedRules.map((id) => (
+              <span key={id} className="rule-chip">{id}</span>
+            ))}
+          </div>
         </div>
       )}
 

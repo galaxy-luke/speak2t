@@ -112,6 +112,50 @@ export function GeneralTab({ draft, onChange }: Props) {
           <p className="hint">寫入 Windows 登錄檔 <code>HKCU\Software\Microsoft\Windows\CurrentVersion\Run</code>，開機時背景啟動。</p>
         </div>
       </section>
+
+      {/* P3 Stage 1：自動標點修正 */}
+      <section className="form-row">
+        <label className="form-label" htmlFor="postprocess-enabled">
+          自動標點修正
+        </label>
+        <div className="form-control">
+          <label className="toggle">
+            <input
+              id="postprocess-enabled"
+              type="checkbox"
+              checked={draft.postprocessEnabled}
+              onChange={(e) => onChange({ postprocessEnabled: e.target.checked })}
+            />
+            <span className="toggle-slider" />
+            <span className="toggle-label">
+              {draft.postprocessEnabled ? '已啟用（中英空格 / 句尾句號 / 標點統一）' : '已關閉（ASR 原始輸出）'}
+            </span>
+          </label>
+          <p className="hint">P3 Stage 1：在 ASR 輸出後套用 6 條規則（中英空格、中數空格、句尾句號、逗號統一、空白折疊、trim）。</p>
+        </div>
+      </section>
+
+      {/* P3 Stage 2：自動引擎降級 */}
+      <section className="form-row">
+        <label className="form-label" htmlFor="auto-degrade">
+          自動引擎降級
+        </label>
+        <div className="form-control">
+          <label className="toggle">
+            <input
+              id="auto-degrade"
+              type="checkbox"
+              checked={draft.autoDegrade}
+              onChange={(e) => onChange({ autoDegrade: e.target.checked })}
+            />
+            <span className="toggle-slider" />
+            <span className="toggle-label">
+              {draft.autoDegrade ? '已啟用（sherpa 失敗自動切 whisper）' : '已關閉（失敗時直接報錯）'}
+            </span>
+          </label>
+          <p className="hint">P3 Stage 2：sherpa 啟動失敗或連續 2 次 feed 失敗時，自動切換到 whisper 引擎。降級會顯示 toast 通知。</p>
+        </div>
+      </section>
     </div>
   );
 }

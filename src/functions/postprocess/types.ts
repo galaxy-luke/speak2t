@@ -26,4 +26,6 @@ export interface PostprocessResult {
   processed: string;
   appliedRules: string[];
   skippedRules: string[];
+  /** 是否有變化（processed !== original） */
+  changed: boolean;
 }
