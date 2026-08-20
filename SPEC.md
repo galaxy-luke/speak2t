@@ -1,8 +1,8 @@
 # Speak2T — 語音輸入轉文字工具 規劃書
 
-> **狀態**: v1.2 ✅（D-4 / D-5 雙引擎：sherpa-onnx-streaming 預設 + whisper.cpp 備援）
+> **狀態**: v1.3 ✅（D-7 簡化：開機啟動改為設定頁 toggle；P0-P2 全部完成）
 > **建立日期**: 2026-08-19
-> **最後更新**: 2026-08-19
+> **最後更新**: 2026-08-20
 > **目標平台**: Windows 11 優先（後續 macOS）
 > **語言焦點**: 繁體中文（zh-TW）為主、英文混講為輔
 > **工作目錄**: `D:\My_Projects\Speak2T`
@@ -296,8 +296,8 @@ speak2t/
 
 ## 6. 開發階段計畫
 
-> **進度快照（2026-08-20）**：P0 ✅ 完成（commit `e071bf7`），P1 ✅ 完成（10 個 commit 累積，HEAD = `bca2289`，領先 origin/main 9 commit），P2 規劃中。
-> 詳細 P1 變更見 [`CHANGELOG.md`](./CHANGELOG.md) 與 [`docs/plans/P1-plan.md`](./docs/plans/P1-plan.md)。
+> **進度快照（2026-08-20）**：P0 ✅ 完成（commit `e071bf7`），P1 ✅ 完成（10 個 commit 累積，HEAD = `bca2289`），P2 ✅ 完成（3 個新 commit，HEAD = `b7b0836`，領先 origin/main 13 commit）。
+> 詳細 P2 變更見 [`CHANGELOG.md`](./CHANGELOG.md) 與 [`docs/plans/P2-plan.md`](./docs/plans/P2-plan.md)。
 
 ### P0 — 雛形（核心閉環，3–5 天）
 
@@ -325,15 +325,16 @@ speak2t/
 **驗收**: Toggle 模式能用，浮窗顯示狀態，文字直接注入到 Notion / VSCode ✅
 （ASR 真的跑需要 user 跑 `npm run download-model sherpa-zh-en` 拿模型）
 
-### P2 — 設定 UI + 模型管理（3–4 天）
+### P2 — 設定 UI + 模型管理 + 開機啟動（3–4 天）
 
-- [ ] 設定主視窗（熱鍵、模式、引擎、模型、麥克風）
-- [ ] 模型下載 / 切換 UI
-- [ ] 麥克風裝置列舉 + 選擇
-- [ ] 注入方式設定
-- [ ] 指示器位置 / 大小設定
+- [x] 設定主視窗（navbar + 4 tab：一般/ASR/麥克風/進階）✅
+- [x] 引擎/preset 切換 + 自動重載 ASR ✅
+- [x] 模型下載 UI（進度條 + 取消 + 完成自動 reload）✅
+- [x] 麥克風裝置列舉 + 選擇（從 P1 搬來精修）✅
+- [x] 注入方式 / 指示器位置 / 開機啟動 toggle ✅
+- [x] 設定檔重置（進階 tab）✅
 
-**驗收**: 全部功能可從 UI 設定，不需改 config
+**驗收**: 全部功能可從 UI 設定，不需改 config ✅
 
 ### P3 — 繁中優化（2–3 天）
 
@@ -373,7 +374,7 @@ speak2t/
 | **D-4** | ASR 引擎 | ✅ **sherpa-onnx-streaming（預設）+ whisper.cpp（備援）**（v1.2 修訂）| 雙引擎架構：低延遲預設 + 高品質備援，設定可切換 |
 | **D-5** | 預設模型 | ✅ **sherpa-onnx-streaming-zh-en（預設）+ Whisper-small-zh_tw（備援）**（v1.2 修訂）| 預設取延遲優勢；備援取台灣腔調品質 |
 | **D-6** | 注入方式 | ✅ **兩種都給，user 設定切換** | 預設剪貼簿 + 自動 Ctrl+V；可切換純模擬按鍵 |
-| **D-7** | 開機自動啟動 | ✅ **首次啟動彈小窗詢問** | 不預設啟動，由 user 決定 |
+| **D-7** | 開機自動啟動 | ✅ **設定頁 toggle，預設 off**（v1.3 簡化：從「首次啟動彈窗」改為「設定頁可開」）| 不預設啟動，由 user 決定 |
 | **D-8** | 開源授權 | ✅ **MIT** | 最寬鬆、商業可用 |
 | **D-9** | 模型存放位置 | ✅ **兩者都支援，user 可選** | 預設 `%APPDATA%\speak2t\models\` |
 | **D-10** | 首次啟動下載 | ✅ **預設手動下載，可改自動** | 透明優先 |
@@ -389,8 +390,9 @@ speak2t/
   - 抽象介面 `ASR engine` 同時支援兩種實作
   - 整合時程：P1 先做 sherpa-onnx-streaming 主線，視台灣腔調表現再決定是否加 whisper.cpp
 - D-6（兩種注入）：injector 模組需設計策略切換器；剪貼簿注入要實作備份+還原
+- **D-7（v1.3 簡化）**：原決策「首次啟動彈小窗詢問」改為「設定頁 toggle，預設 off」。理由：實作 modal 成本高、user 設定介面已經夠直覺、避免首次啟動體驗被中斷。實作位置：P2 Stage 3（`src/functions/autostart/manager.ts` + GeneralTab toggle）
 - D-9（兩種路徑）：模型路徑存到 settings，可從設定頁改
-- D-10（手動/自動）：首次啟動流程：偵測模型 → 缺模型時彈下載提示窗（預設）或直接背景下載
+- D-10（手動/自動）：首次啟動流程：偵測模型 → 缺模型時 ASR tab 顯示「下載」按鈕（直接 UI 操作，無 modal）
 
 ---
 

@@ -1,5 +1,123 @@
 # Changelog
 
+## [P2] - 2026-08-20
+
+### Highlights
+
+Speak2T 進入 P2 階段，把 P1 留下的「寫程式才能設定」升級成「UI 直接設定」，並補齊首次使用的最後一塊拼圖（自動下載模型 + 開機自動啟動）。  
+預期全部功能可從 UI 設定，不需改 config。
+
+### Added
+
+#### Stage 1 — 獨立設定主視窗（navbar + 4 tab + form draft）
+- 主視窗 800x600 → **900x650**（容納新佈局）
+- `src/renderer/settings/SettingsApp.tsx` 重構：
+  - 左側 navbar 200px（一般/ASR/麥克風/進階）
+  - 右側 tab 內容區
+  - Top status bar：狀態 + 熱鍵觸發計數 + 儲存/取消按鈕
+  - **Form draft 模式**：改值不立即寫，按「儲存」才寫磁碟
+  - isDirty 偵測：JSON 比對差異，「有未儲存的修改」提示
+- 4 個 tab 拆出獨立檔案：
+  - `tabs/GeneralTab.tsx`：熱鍵（純顯示）/錄音模式/注入方式/指示器位置/開機啟動
+  - `tabs/AsrTab.tsx`：引擎/preset/自訂路徑 + AsrTester（mic 測試）
+  - `tabs/MicTab.tsx`：設備選擇（enumerateDevices + devicechange）
+  - `tabs/AdvancedTab.tsx`：關於 + 重置設定（含確認 modal）
+- 2 個共用 hook：
+  - `hooks/useAudioDevices.ts`：封裝 enumerateDevices + devicechange
+  - `hooks/useAsrEvents.ts`：封裝 ASR 事件訂閱
+- main `SAVE_SETTINGS` handler 整合 **ASR 引擎自動切換**（P2 重要）：
+  - 偵測 asrEngine / asrModelPreset 變更 → 呼叫 `asrManager.switchEngine()`
+  - 切換失敗自動回滾 settings（避免 UI 顯示不一致）
+- styles.css 加 navbar/form-row/toggle/info-box/confirm-row/tab-pane 等樣式
+
+#### Stage 2 — 自動模型下載 UI
+- `scripts/download-model.mjs` 加 **`--json` flag**：
+  - JSON 事件流（start/progress/phase/exists/done/error/cancelled/list）
+  - SIGTERM 優雅取消（child process kill）
+  - 保留原 CLI 互動模式為預設（向後相容）
+  - JSON 模式不再使用 readline（無法互動）
+- `src/functions/model/downloader.ts`：main 端 `ModelDownloader` 類別
+  - `listModels()`：用 `existsSync` 判定本機安裝狀態
+  - `startDownload(presetKey)`：spawn `process.execPath` + `ELECTRON_RUN_AS_NODE` 跑 script
+  - `cancelDownload()`：SIGTERM → 3 秒 grace → SIGKILL
+  - 逐行解析 stdout JSON 事件
+  - Singleton 模式（一次只允許一個下載）
+- IPC 新增 **8 個 channel**：
+  - renderer→main：`LIST_MODELS` / `DOWNLOAD_MODEL` / `CANCEL_DOWNLOAD`
+  - main→renderer：`DOWNLOAD_PROGRESS` / `DOWNLOAD_COMPLETE` / `DOWNLOAD_ERROR` / `DOWNLOAD_EXISTS` / `DOWNLOAD_CANCELLED`
+- main `wireModelDownloader()`：
+  - 訂閱 downloader events → broadcast 到所有 renderer
+  - **下載完成自動 `asrManager.switchEngine()`**（讓新模型立即可用）
+- `before-quit` 自動 cancel 進行中的下載
+- preload 暴露 5 個 method + 5 個事件訂閱
+- `useDownloadState` hook：封裝下載狀態機（idle/downloading/completed/error/cancelled/exists）
+- `ModelList` 子元件：模型清單 + 下載/取消/進度條 UI
+- styles.css 加 model-list / progress-bar / indeterminate 動畫
+
+#### Stage 3 — 開機自動啟動
+- `src/functions/autostart/manager.ts`：
+  - `applyAutoStart(enabled)`：包裝 `app.setLoginItemSettings`
+  - `openAsHidden: true`（開機時背景啟動不彈主視窗）
+  - `getAutoStartEnabled()`：查詢當前 OS 狀態
+  - 失敗不丟 exception（OS 限制 / 權限問題不該 crash app）
+- main `app.whenReady` 套用 `settings.autoStart`
+- main 訂閱 `settings:changed` 即時套用
+- D-7 決策實作：設定頁 toggle，預設 off
+
+### Changed
+
+- **shared/types.ts**：AppSettings 既有欄位不變
+- **shared/ipc-channels.ts**：從 14 個 channel 擴充到 22 個（P2 新增 8 個）
+- **shared/api.ts**：Speak2tApi 從 15 個 method 擴充到 18 個，event subscriber 從 14 個到 19 個
+- **preload/index.ts**：contextBridge 擴充
+- **main/index.ts**：從 270+ 行擴充到 350+ 行（model downloader wiring、autoStart wiring）
+- **SPEC.md §7 D-7**：v1.3 修訂為「設定頁 toggle，預設 off」（從「首次啟動彈窗」簡化）
+
+### Tech Debt 處理
+
+- ❌ P2 沒處理升級 `@vitejs/plugin-react`（v5 留到 P2 之後，dev 還在用 `--legacy-peer-deps`）
+- ❌ vite 6+ deprecation 警告（jsx / esbuild / oxc）仍存
+
+### P2 Out of Scope（明確不做）
+
+- ❌ PTT 模式（需 uiohook-napi native hook，留 P1+1）
+- ❌ 標點自動修正（P3）
+- ❌ 多段錄音歷史（P5）
+- ❌ macOS 專屬功能（目前 Windows 11 優先）
+- ❌ electron-builder 打包（P4）
+- ❌ 自動更新（P4）
+- ❌ 雲端 fallback（O-3 明確不要）
+- ❌ 設定頁「重置設定」改為 export/import（留 P5）
+
+### Commits
+
+累計 3 個新 commit（P2）：
+
+1. `041daed` feat: P2 stage 1 - 獨立設定主視窗 (navbar + 4 tab + form draft)
+2. `dc13959` feat: P2 stage 2 - 自動模型下載 UI + 進度條 + asrManager.reload
+3. `b7b0836` feat: P2 stage 3 - 開機自動啟動 (app.setLoginItemSettings)
+
+### P2 User Setup Required
+
+P2 完成後，user 可直接在 UI 做所有事：
+
+```powershell
+cd D:\My_Projects\Speak2T
+npm install --legacy-peer-deps
+npm run dev
+```
+
+開啟設定 → ASR tab → 點「下載」即可下載模型，無需再開 terminal。
+
+### Known Limitations（P2 新增）
+
+- download-model.mjs 的 MODELS 與 downloader.ts 的 MODELS 兩處手動同步（Stage 2 註解有提示）
+- autoStart 在 Linux 上 `app.setLoginItemSettings` 行為可能不同（P4 再驗）
+- 切換 ASR 引擎時如果正在辨識中會 refuse（待 P3+ 加 queue）
+- ModelList 不顯示下載歷史（多版本管理留 P5）
+
+---
+
 ## [P1] - 2026-08-20
 
 ### Highlights
