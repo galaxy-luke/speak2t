@@ -19,6 +19,7 @@ import { createTray, destroyTray } from './tray';
 import { hotkeyManager } from '../functions/hotkey/manager';
 import { audioIngest } from '../functions/audio/ingest';
 import { AsrManager } from '../functions/asr/manager';
+import { clipboardInjector } from '../functions/injector/clipboard';
 import { lifecycle } from './lifecycle';
 import { DEFAULT_HOTKEY } from '../shared/constants';
 import type { AppSettings } from '../shared/types';
@@ -180,6 +181,20 @@ function registerIpcHandlers(): void {
       try {
         const result = await asrManager.stop();
         console.log(`[main] ASR result: "${result.text}" (${result.durationMs}ms)`);
+
+        // 文字注入（D-C 兩種模式：clipboard / clipboard-and-paste）
+        if (result.text) {
+          const settings = appState.getSettings();
+          const injectResult = await clipboardInjector.inject(
+            result.text,
+            settings.injectionMode,
+          );
+          if (injectResult.ok) {
+            console.log(`[main] injected ${injectResult.text.length} chars via ${settings.injectionMode}`);
+          } else {
+            console.warn(`[main] injection failed: ${injectResult.reason ?? 'unknown'}`);
+          }
+        }
       } catch (err) {
         console.error('[main] asr stop failed:', err);
       }
