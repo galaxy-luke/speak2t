@@ -21,7 +21,7 @@
  *   130 收到 SIGTERM
  */
 
-import { createWriteStream, existsSync, mkdirSync, statSync, rmSync, renameSync, createReadStream } from 'node:fs';
+import { createWriteStream, existsSync, mkdirSync, statSync, rmSync, renameSync, createReadStream, readFileSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { join, dirname } from 'node:path';
@@ -191,6 +191,67 @@ function getAppDataDir() {
 
 function getModelDir(preset) {
   return join(getAppDataDir(), preset);
+}
+
+/** 從 settings.json 讀取 TOFU baselines（commit 5：CLI --tofu-list / --verify 用） */
+function loadSettingsFromDisk() {
+  // settings.json 位置：<userData>/settings.json（Electron 慣例）
+  const appdata = process.env.APPDATA || process.env.HOME;
+  if (!appdata) return { tofuBaselines: {} };
+  const settingsPath = join(appdata, 'speak2t', 'settings.json');
+  if (!existsSync(settingsPath)) return { tofuBaselines: {} };
+  try {
+    const raw = readFileSync(settingsPath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    return {
+      ...parsed,
+      tofuBaselines: parsed.tofuBaselines ?? {},
+    };
+  } catch (err) {
+    console.warn(`[cli] 讀 settings.json 失敗：${err.message}`);
+    return { tofuBaselines: {} };
+  }
+}
+
+/** 對模型路徑（檔案 or 目錄）算整體 hash（commit 5：CLI --verify 用） */
+async function computeModelHash(modelPath) {
+  const stat = statSync(modelPath);
+  if (stat.isFile()) {
+    const hash = await hashFile(modelPath);
+    return { hash, size: stat.size };
+  }
+  if (!stat.isDirectory()) {
+    throw new Error(`不支援的路徑型別：${modelPath}`);
+  }
+  const entries = readdirSync(modelPath, { withFileTypes: true });
+  const fileNames = entries.filter((e) => e.isFile()).map((e) => e.name).sort();
+  let totalSize = 0;
+  const concatHashes = [];
+  for (const name of fileNames) {
+    const fp = join(modelPath, name);
+    const fs = statSync(fp);
+    if (!fs.isFile()) continue;
+    const sha = await hashFile(fp);
+    totalSize += fs.size;
+    concatHashes.push(sha);
+  }
+  const overall = createHash('sha256');
+  for (const sha of concatHashes) {
+    overall.update(sha);
+    overall.update('\n');
+  }
+  return { hash: overall.digest('hex'), size: totalSize };
+}
+
+/** 對單一檔案算 SHA-256（stream） */
+function hashFile(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = createHash('sha256');
+    const stream = createReadStream(filePath);
+    stream.on('data', (chunk) => hash.update(chunk));
+    stream.on('end', () => resolve(hash.digest('hex')));
+    stream.on('error', reject);
+  });
 }
 
 function formatBytes(bytes) {
@@ -649,17 +710,101 @@ async function main() {
     return;
   }
 
+  // --tofu-list（commit 5：列出所有 TOFU baselines）
+  if (process.argv.includes('--tofu-list')) {
+    const settings = loadSettingsFromDisk();
+    if (JSON_MODE) {
+      process.stdout.write(JSON.stringify({ event: 'tofuList', baselines: settings.tofuBaselines }) + '\n');
+    } else {
+      const entries = Object.entries(settings.tofuBaselines);
+      if (entries.length === 0) {
+        console.log('目前沒有任何 TOFU baseline。下載模型後會自動建立。');
+      } else {
+        console.log(`目前有 ${entries.length} 個 TOFU baseline：\n`);
+        for (const [preset, t] of entries) {
+          console.log(`  ${preset}`);
+          console.log(`    SHA-256: ${t.sha256.slice(0, 16)}…${t.sha256.slice(-8)}`);
+          console.log(`    大小：${(t.sizeBytes / 1024 / 1024).toFixed(1)} MB`);
+          console.log(`    建立時間：${t.establishedAt}`);
+          console.log(`    來源：${t.source}\n`);
+        }
+      }
+    }
+    return;
+  }
+
+  // --verify <preset>（commit 5：手動校驗單一模型）
+  const verifyIdx = process.argv.indexOf('--verify');
+  if (verifyIdx !== -1) {
+    const preset = process.argv[verifyIdx + 1];
+    if (!preset || !MODELS[preset]) {
+      console.error(`錯誤：--verify 需要指定有效模型 key（可用 --list 看）`);
+      process.exit(1);
+    }
+    const model = MODELS[preset];
+    const modelPath = getModelDir(preset);
+    if (!existsSync(modelPath)) {
+      console.error(`錯誤：模型未下載 ${modelPath}`);
+      process.exit(2);
+    }
+    const result = await computeModelHash(modelPath);
+    const settings = loadSettingsFromDisk();
+    const tofuMap = settings.tofuBaselines ?? {};
+    const tofu = Object.values(tofuMap).find((t) => t.sha256 === result.hash) ?? null;
+    if (JSON_MODE) {
+      process.stdout.write(
+        JSON.stringify({
+          event: 'verify',
+          preset,
+          hash: result.hash,
+          size: result.size,
+          officialSha256: model.sha256 ?? null,
+          tofuBaseline: tofuMap[preset] ?? null,
+          status: model.sha256 === result.hash
+            ? 'official-verified'
+            : tofuMap[preset]?.sha256 === result.hash
+              ? 'tofu-verified'
+              : (model.sha256 || tofuMap[preset]) ? 'mismatch' : 'no-baseline',
+        }) + '\n',
+      );
+    } else {
+      console.log(`校驗結果：${preset}`);
+      console.log(`  路徑：${modelPath}`);
+      console.log(`  整體 SHA-256：${result.hash}`);
+      console.log(`  總大小：${(result.size / 1024 / 1024).toFixed(1)} MB`);
+      if (model.sha256) {
+        const match = model.sha256 === result.hash;
+        console.log(`  官方 baseline：${match ? '✅ 對得起來' : '❌ 對不起來'}`);
+        console.log(`    預期：${model.sha256}`);
+        console.log(`    實際：${result.hash}`);
+      } else if (tofuMap[preset]) {
+        const match = tofuMap[preset].sha256 === result.hash;
+        console.log(`  TOFU baseline：${match ? '✅ 對得起來' : '❌ 對不起來'}`);
+        console.log(`    預期：${tofuMap[preset].sha256}`);
+        console.log(`    實際：${result.hash}`);
+      } else {
+        console.log(`  ⚠️ 沒任何 baseline（建議下載完保留磁碟檔，下次啟動會自動建 TOFU）`);
+      }
+    }
+    return;
+  }
+
   // --help
   if (process.argv.includes('--help') || process.argv.includes('-h')) {
     console.log(`用法：
-  node scripts/download-model.mjs                     → 互動選單
-  node scripts/download-model.mjs sherpa-zh-en        → 直接下載
-  node scripts/download-model.mjs --list              → 列出可用模型
-  node scripts/download-model.mjs --json sherpa-zh-en → JSON 事件流（main 進程用）
-  node scripts/download-model.mjs --force sherpa-zh-en → 覆蓋已安裝的模型
+  node scripts/download-model.mjs                       → 互動選單
+  node scripts/download-model.mjs sherpa-zh-en          → 直接下載
+  node scripts/download-model.mjs --list                → 列出可用模型
+  node scripts/download-model.mjs --verify sherpa-zh-en → 校驗單一已下載模型
+  node scripts/download-model.mjs --tofu-list           → 列出所有 TOFU baseline
+  node scripts/download-model.mjs --json sherpa-zh-en   → JSON 事件流（main 進程用）
+  node scripts/download-model.mjs --force sherpa-zh-en  → 覆蓋已安裝的模型
 
   SHA-256 驗證：
   下載完會比對 MODELS.sha256（若未填則只算不驗證）。驗證失敗會自動刪除 corrupt 檔。
+  TOFU（Trust On First Use）：
+  對沒官方 baseline 的模型（Luigi / whisper-small），下載完成時自動建 TOFU baseline
+  存進 settings.json。日後啟動時自動重算比對，偵測檔案被竊改 / 磁碟損壞。
 `);
     return;
   }
