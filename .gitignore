@@ -20,6 +20,7 @@ release/
 .idea/
 *.swp
 *.swo
+*.kra            # Krita autosave（~ 結尾的備份檔 Windows 上 git 規則不匹配，user 手動清）
 .DS_Store
 Thumbs.db
 
