@@ -127,12 +127,9 @@ export class ClipboardInjector {
         },
       );
 
-      let stdout = '';
       let stderr = '';
 
-      ps.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
+      // 收集 stderr 給 exit handler 用（stdout 不需要，只關心錯誤）
       ps.stderr.on('data', (data) => {
         stderr += data.toString();
       });

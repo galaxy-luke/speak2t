@@ -163,7 +163,7 @@ export class ModelDownloader extends EventEmitter {
         try {
           const event = JSON.parse(trimmed);
           this.handleEvent(presetKey, event);
-        } catch (err) {
+        } catch (_err) {
           // 非 JSON 行（不該出現，除非 script bug）→ log warning
           console.warn(`[downloader] 非 JSON 輸出：${trimmed}`);
         }
@@ -250,8 +250,17 @@ export class ModelDownloader extends EventEmitter {
 
   // ===== private =====
 
-  private handleEvent(preset: string, event: any): void {
-    switch (event.event) {
+  /**
+   * 解析 child stdout 傳來的 JSON 事件，type 為 unknown 避免 any 擴散
+   * （用 switch case 處理已知事件，未知事件 log warning）
+   */
+  private handleEvent(preset: string, event: unknown): void {
+    if (typeof event !== 'object' || event === null) {
+      console.warn(`[downloader] 事件不是 object：${JSON.stringify(event)}`);
+      return;
+    }
+    const e = event as { event?: string; [key: string]: unknown };
+    switch (e.event) {
       case 'start':
         // 已在 startDownload 觸發過，這裡可忽略或補資料
         break;
@@ -259,52 +268,52 @@ export class ModelDownloader extends EventEmitter {
       case 'progress':
         this.emit('progress', {
           preset,
-          phase: event.phase,
-          downloaded: event.downloaded,
-          total: event.total,
-          percent: event.percent,
-          speedBps: event.speedBps,
-          remainingSec: event.remainingSec,
+          phase: e.phase,
+          downloaded: e.downloaded,
+          total: e.total,
+          percent: e.percent,
+          speedBps: e.speedBps,
+          remainingSec: e.remainingSec,
         } as DownloadProgressEvent);
         break;
 
       case 'phase':
         // 解壓/cleanup 階段
-        this.emit('log', { preset, message: event.message ?? '' });
+        this.emit('log', { preset, message: (e.message as string) ?? '' });
         this.emit('progress', {
           preset,
-          phase: event.phase,
+          phase: e.phase as DownloadProgressEvent['phase'],
           downloaded: 0,
           total: 0,
           percent: 0,
           speedBps: 0,
           remainingSec: 0,
-          message: event.message,
+          message: e.message as string | undefined,
         } as DownloadProgressEvent);
         break;
 
       case 'exists':
-        this.emit('exists', { preset, path: event.path } as DownloadExistsEvent);
+        this.emit('exists', { preset, path: e.path as string } as DownloadExistsEvent);
         break;
 
       case 'done':
         this.emit('complete', {
           preset,
-          path: event.path,
-          durationMs: event.durationMs,
+          path: e.path as string,
+          durationMs: e.durationMs as number,
         } as DownloadCompleteEvent);
         break;
 
       case 'cancelled':
-        this.emit('log', { preset, message: event.message ?? '已取消' });
+        this.emit('log', { preset, message: (e.message as string) ?? '已取消' });
         // 真正的 cancelled 事件會在 child exit 時發
         break;
 
       case 'error':
         this.emit('error', {
           preset,
-          code: event.code ?? 'unknown',
-          message: event.message ?? 'unknown error',
+          code: (e.code as string) ?? 'unknown',
+          message: (e.message as string) ?? 'unknown error',
         } as DownloadErrorEvent);
         break;
 
@@ -313,7 +322,7 @@ export class ModelDownloader extends EventEmitter {
         break;
 
       default:
-        console.warn(`[downloader] 未知事件：${event.event}`);
+        console.warn(`[downloader] 未知事件：${e.event}`);
     }
   }
 
