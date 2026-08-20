@@ -1,5 +1,68 @@
 # Changelog
 
+## [Tech Debt Cleanup] - 2026-08-20
+
+### Highlights
+
+清理 P0-P3 累積的技術債：升級 plugin-react v5、修完所有 lint 警告、消掉 vite deprecation 警告、測試覆蓋率從 30 → 61。
+
+### Changed
+
+#### 升級 @vitejs/plugin-react v4 → v5（`b489bd1`）
+- 套件：`@vitejs/plugin-react@4.3.4` → `5.2.0`
+- 移除 `--legacy-peer-deps` 需求
+- 副作用：無（v5 API 向後相容）
+
+#### 修 lint 警告：`35e4cea`
+- 12 errors + 3 warnings → **0**
+- `eslint.config.js` 加 override block，6 個用 EventEmitter pattern 的檔案
+  關閉 `no-unsafe-declaration-merging`（TypeScript 官方推薦的強型別 EventEmitter pattern）
+- `clipboard.ts`：移除未使用的 `stdout` 變數
+- `downloader.ts`：
+  - `catch (err)` 改 `catch (_err)`（caughtErrorsIgnorePattern）
+  - `handleEvent(event: any)` 改 `unknown` + 型別 narrow
+- `eslint.config.js` 加 `caughtErrorsIgnorePattern: '^_'`
+
+#### 修 vite deprecation 警告：`7a0c535`
+- `vite.config.ts` → `vite.config.mjs`
+- `vitest.config.ts` → `vitest.config.mjs`
+- `eslint.config.js` → `eslint.config.mjs`
+- 使用 `import.meta.url` + `fileURLToPath` 推 __dirname
+- 消掉所有 deprecation 警告：ESM/CJS、esbuild option、rollupOptions → rolldownOptions
+  、configLoader 'native'、Node MODULE_TYPELESS_PACKAGE_JSON
+
+#### 加測試覆蓋率：`58e8ec7`
+- 30 tests → **61 tests**（+31 案例）
+- 新增 2 個 test 檔：
+  - `src/main/__tests__/app-state.test.ts`：14 個 case
+    - load/save、合併 DEFAULT、event 觸發、status 狀態機
+  - `src/functions/audio/__tests__/ingest.test.ts`：17 個 case
+    - start/stop、feed events、level 計算、debug wav 條件
+- 使用 `vi.mock` 隔離 electron app.getPath
+- `tsconfig.main.json` 排除 `**/__tests__/**`（測試不在 main build 範圍）
+- 用 `toBeCloseTo` 處理 Float32Array 精度問題
+
+### Stats
+
+| 指標 | 修復前 | 修復後 |
+|------|--------|--------|
+| Lint errors | 12 | 0 |
+| Lint warnings | 3 | 0 |
+| Vite deprecations | 5 | 0 |
+| Unit tests | 30 | 61 |
+| Test files | 1 | 3 |
+| plugin-react major | v4 | v5 |
+| `--legacy-peer-deps` 需求 | 是 | 否 |
+
+### Commits
+
+1. `b489bd1` chore: 升級 @vitejs/plugin-react v4.3.4 → v5.2.0
+2. `35e4cea` chore: 修 lint 警告 (12 errors + 3 warnings → 0)
+3. `7a0c535` chore: 修 vite deprecation 警告 (rename config 為 .mjs)
+4. `58e8ec7` test: 加測試覆蓋率 (30 → 61 tests)
+
+---
+
 ## [P3] - 2026-08-20
 
 ### Highlights

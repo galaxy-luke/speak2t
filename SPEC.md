@@ -1,6 +1,6 @@
 # Speak2T — 語音輸入轉文字工具 規劃書
 
-> **狀態**: v1.4 ✅（P0-P3 全部完成；後處理器 + 引擎降級上線）
+> **狀態**: v1.5 ✅（P0-P3 全部完成 + Tech debt cleanup；61 unit tests / 0 lint warnings）
 > **建立日期**: 2026-08-19
 > **最後更新**: 2026-08-20
 > **目標平台**: Windows 11 優先（後續 macOS）
@@ -296,8 +296,8 @@ speak2t/
 
 ## 6. 開發階段計畫
 
-> **進度快照（2026-08-20）**：P0 ✅ P1 ✅ P2 ✅ P3 ✅ 全部完成（HEAD = `fe638bf`，領先 origin/main 16 commit）。
-> 詳細 P3 變更見 [`CHANGELOG.md`](./CHANGELOG.md) 與 [`docs/plans/P3-plan.md`](./docs/plans/P3-plan.md)。
+> **進度快照（2026-08-20）**：P0 ✅ P1 ✅ P2 ✅ P3 ✅ Tech debt cleanup ✅ 全部完成（HEAD = `58e8ec7`，領先 origin/main 20 commit）。
+> 詳細 P3 + Tech debt 變更見 [`CHANGELOG.md`](./CHANGELOG.md) 與 [`docs/plans/P3-plan.md`](./docs/plans/P3-plan.md)。
 
 ### P0 — 雛形（核心閉環，3–5 天）
 
