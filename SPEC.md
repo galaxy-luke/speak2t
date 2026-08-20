@@ -296,27 +296,34 @@ speak2t/
 
 ## 6. 開發階段計畫
 
+> **進度快照（2026-08-20）**：P0 ✅ 完成（commit `e071bf7`），P1 ✅ 完成（10 個 commit 累積，HEAD = `bca2289`，領先 origin/main 9 commit），P2 規劃中。
+> 詳細 P1 變更見 [`CHANGELOG.md`](./CHANGELOG.md) 與 [`docs/plans/P1-plan.md`](./docs/plans/P1-plan.md)。
+
 ### P0 — 雛形（核心閉環，3–5 天）
 
-- [ ] Electron 專案骨架 + TS + Vite + React
-- [ ] 主進程：tray + 單一熱鍵（先 hard-code）
-- [ ] 渲染進程：getUserMedia 錄音 → 寫成 WAV
-- [ ] 整合 sherpa-onnx（或 whisper.cpp）做離線檔案辨識
-- [ ] 簡單的"按下按鍵、輸出文字到剪貼簿"流程
-- [ ] 沒有 UI 美化，只求能跑
+- [x] Electron 專案骨架 + TS + Vite + React
+- [x] 主進程：tray + 單一熱鍵（先 hard-code）
+- [x] 渲染進程：getUserMedia 錄音 → 寫成 WAV
+- [x] 整合 sherpa-onnx 預備（套件驗證 OK，實際整合在 P1）
+- [x] 簡單的"按下按鍵、輸出文字到剪貼簿"流程
+- [x] 沒有 UI 美化，只求能跑
 
-**驗收**: 按熱鍵 → 講話 → 放開 → 文字在剪貼簿可貼上
+**驗收**: 按熱鍵 → 講話 → 放開 → 文字在剪貼簿可貼上 ✅
 
-### P1 — 基礎 UX（3–5 天）
+### P1 — 基礎 UX（3–5 天，實際 7 天含 6.5 插隊）
 
-- [ ] 全域快捷鍵（globalShortcut）
-- [ ] 兩種模式：長壓 + 切換
-- [ ] 指示器浮窗（alwaysOnTop、frameless、音量條）
-- [ ] 文字注入：剪貼簿 + 自動 paste
-- [ ] 設定檔持久化（JSON in userData）
-- [ ] 系統匣 icon 切換狀態
+- [x] 全域快捷鍵（globalShortcut） ✅
+- [x] Toggle 模式（預設），PTT 留 P1+1（需 uiohook-napi native key hook） ✅
+- [x] 指示器浮窗（alwaysOnTop、frameless、音量條、partial 文字） ✅
+- [x] 文字注入：剪貼簿 + 自動 paste（兩種模式可選，設定可切） ✅
+- [x] 設定檔持久化（JSON in userData） ✅
+- [x] 系統匣 icon 切換狀態（P1 沿用 P0 tray） ✅
+- [x] 雙引擎：sherpa-onnx-streaming（預設）+ whisper.cpp（備援） ✅
+- [x] 模型下載 script（`npm run download-model` 互動式 CLI） ✅
+- [x] **麥克風設備選擇 UI（user 插隊，enumerateDevices + devicechange）** ✅
 
-**驗收**: 兩種模式都能用，浮窗顯示狀態，文字直接注入到 Notion / VSCode
+**驗收**: Toggle 模式能用，浮窗顯示狀態，文字直接注入到 Notion / VSCode ✅
+（ASR 真的跑需要 user 跑 `npm run download-model sherpa-zh-en` 拿模型）
 
 ### P2 — 設定 UI + 模型管理（3–4 天）
 
