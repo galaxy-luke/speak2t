@@ -1217,7 +1217,7 @@ kbd {
 }
 
 .preview-text {
-  font-size: 0.8571rem;
+  font-size: 0.9821rem; /* 0.8571rem + 2px（user 加大 1 級）= 15.71px */
   color: #e0e0e0;
   font-family: 'Cascadia Code', 'Consolas', monospace;
   word-break: break-word;
