@@ -943,6 +943,72 @@ kbd {
   text-align: center;
 }
 
+/* ===== P4 Stage 2: 自動更新 UI ===== */
+
+.update-checker {
+  margin-top: 8px;
+}
+
+.update-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.update-label {
+  font-size: 12px;
+  color: #888;
+}
+
+.update-version {
+  font-family: 'Cascadia Code', monospace;
+  font-size: 14px;
+  color: #4a9eff;
+  background: #1a1a1a;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.update-msg {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.update-msg.info {
+  background: #1a2a3a;
+  color: #88bbff;
+}
+
+.update-msg.success {
+  background: #1e3a1e;
+  color: #b8e6b8;
+}
+
+.update-msg.available {
+  background: #3a2a1a;
+  color: #ffd9a8;
+}
+
+.update-msg.error {
+  background: #3a1e1e;
+  color: #ffb8b8;
+}
+
+.update-msg.downloaded {
+  background: #1a3a2a;
+  color: #b8e6c8;
+}
+
+.update-progress {
+  margin-top: 8px;
+}
+
 /* ===== P3 Stage 3: 後處理預覽 / 對比顯示 ===== */
 
 .postprocess-compare {

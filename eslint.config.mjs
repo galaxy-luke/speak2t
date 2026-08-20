@@ -71,6 +71,7 @@ export default [
       'src/functions/audio/ingest.ts',
       'src/functions/hotkey/manager.ts',
       'src/functions/model/downloader.ts',
+      'src/functions/update/manager.ts',
     ],
     rules: {
       '@typescript-eslint/no-unsafe-declaration-merging': 'off',

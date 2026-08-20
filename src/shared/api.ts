@@ -90,6 +90,23 @@ export interface Speak2tApi {
   onAsrPostprocessed: (callback: (data: AsrPostprocessedPayload) => void) => () => void;
   /** P3：引擎降級通知 */
   onAsrEngineDegraded: (callback: (data: AsrEngineDegradedPayload) => void) => () => void;
+
+  // ===== P4 新增 =====
+
+  // 自動更新（renderer → main）
+  /** 觸發檢查更新（async non-blocking） */
+  checkForUpdate: () => Promise<void>;
+  /** 套用更新（quit + install） */
+  applyUpdate: () => Promise<void>;
+
+  // 自動更新事件訂閱
+  onUpdateDevMode: (callback: (data: { currentVersion: string }) => void) => () => void;
+  onUpdateChecking: (callback: (data: { timestamp: number }) => void) => () => void;
+  onUpdateAvailable: (callback: (data: UpdateAvailablePayload) => void) => () => void;
+  onUpdateUpToDate: (callback: (data: UpdateUpToDatePayload) => void) => () => void;
+  onUpdateDownloadProgress: (callback: (data: UpdateDownloadProgressPayload) => void) => () => void;
+  onUpdateDownloaded: (callback: (data: UpdateDownloadedPayload) => void) => () => void;
+  onUpdateError: (callback: (data: UpdateErrorPayload) => void) => () => void;
 }
 
 // ===== 既有 payload =====
@@ -224,6 +241,40 @@ export interface AsrEngineDegradedPayload {
   to: AsrEngineType;
   /** 降級原因 */
   reason: string;
+  timestamp: number;
+}
+
+// ===== P4 新增 payload =====
+
+/** 找到新版本 */
+export interface UpdateAvailablePayload {
+  version: string;
+  releaseDate?: string;
+  timestamp: number;
+}
+
+/** 已是最新 */
+export interface UpdateUpToDatePayload {
+  currentVersion: string;
+  timestamp: number;
+}
+
+/** 下載進度 */
+export interface UpdateDownloadProgressPayload {
+  percent: number;
+  timestamp: number;
+}
+
+/** 下載完成 */
+export interface UpdateDownloadedPayload {
+  version: string;
+  timestamp: number;
+}
+
+/** 更新錯誤 */
+export interface UpdateErrorPayload {
+  code: string;
+  message: string;
   timestamp: number;
 }
 

@@ -26,6 +26,11 @@ import type {
   DownloadCancelledPayload,
   AsrPostprocessedPayload,
   AsrEngineDegradedPayload,
+  UpdateAvailablePayload,
+  UpdateUpToDatePayload,
+  UpdateDownloadProgressPayload,
+  UpdateDownloadedPayload,
+  UpdateErrorPayload,
 } from '../shared/api';
 
 const api: Speak2tApi = {
@@ -173,6 +178,47 @@ const api: Speak2tApi = {
     const listener = (_event: unknown, data: AsrEngineDegradedPayload) => callback(data);
     ipcRenderer.on(IPC.ASR_ENGINE_DEGRADED, listener);
     return () => ipcRenderer.removeListener(IPC.ASR_ENGINE_DEGRADED, listener);
+  },
+
+  // ===== P4：自動更新 =====
+
+  checkForUpdate: () => ipcRenderer.invoke(IPC.CHECK_UPDATE) as Promise<void>,
+  applyUpdate: () => ipcRenderer.invoke(IPC.APPLY_UPDATE) as Promise<void>,
+
+  onUpdateDevMode: (callback) => {
+    const listener = (_event: unknown, data: { currentVersion: string }) => callback(data);
+    ipcRenderer.on(IPC.UPDATE_DEV_MODE, listener);
+    return () => ipcRenderer.removeListener(IPC.UPDATE_DEV_MODE, listener);
+  },
+  onUpdateChecking: (callback) => {
+    const listener = (_event: unknown, data: { timestamp: number }) => callback(data);
+    ipcRenderer.on(IPC.UPDATE_CHECKING, listener);
+    return () => ipcRenderer.removeListener(IPC.UPDATE_CHECKING, listener);
+  },
+  onUpdateAvailable: (callback) => {
+    const listener = (_event: unknown, data: UpdateAvailablePayload) => callback(data);
+    ipcRenderer.on(IPC.UPDATE_AVAILABLE, listener);
+    return () => ipcRenderer.removeListener(IPC.UPDATE_AVAILABLE, listener);
+  },
+  onUpdateUpToDate: (callback) => {
+    const listener = (_event: unknown, data: UpdateUpToDatePayload) => callback(data);
+    ipcRenderer.on(IPC.UPDATE_UP_TO_DATE, listener);
+    return () => ipcRenderer.removeListener(IPC.UPDATE_UP_TO_DATE, listener);
+  },
+  onUpdateDownloadProgress: (callback) => {
+    const listener = (_event: unknown, data: UpdateDownloadProgressPayload) => callback(data);
+    ipcRenderer.on(IPC.UPDATE_DOWNLOAD_PROGRESS, listener);
+    return () => ipcRenderer.removeListener(IPC.UPDATE_DOWNLOAD_PROGRESS, listener);
+  },
+  onUpdateDownloaded: (callback) => {
+    const listener = (_event: unknown, data: UpdateDownloadedPayload) => callback(data);
+    ipcRenderer.on(IPC.UPDATE_DOWNLOADED, listener);
+    return () => ipcRenderer.removeListener(IPC.UPDATE_DOWNLOADED, listener);
+  },
+  onUpdateError: (callback) => {
+    const listener = (_event: unknown, data: UpdateErrorPayload) => callback(data);
+    ipcRenderer.on(IPC.UPDATE_ERROR, listener);
+    return () => ipcRenderer.removeListener(IPC.UPDATE_ERROR, listener);
   },
 };
 

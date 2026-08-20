@@ -85,4 +85,28 @@ export const IPC = {
   ASR_POSTPROCESSED: 'broadcast:asr:postprocessed',
   /** 引擎自動降級通知（sherpa 失敗 → 切 whisper） */
   ASR_ENGINE_DEGRADED: 'broadcast:asr:engine-degraded',
+
+  // ===== P4 新增 =====
+
+  // 自動更新（renderer → main）
+  /** 觸發檢查更新 */
+  CHECK_UPDATE: 'invoke:update:check',
+  /** 套用更新（下載完成後呼叫，會 quit app） */
+  APPLY_UPDATE: 'invoke:update:apply',
+
+  // 自動更新（main → renderer 廣播）
+  /** 進入 dev 模式（不檢查） */
+  UPDATE_DEV_MODE: 'broadcast:update:dev-mode',
+  /** 開始檢查 */
+  UPDATE_CHECKING: 'broadcast:update:checking',
+  /** 找到新版本 */
+  UPDATE_AVAILABLE: 'broadcast:update:available',
+  /** 已是最新 */
+  UPDATE_UP_TO_DATE: 'broadcast:update:up-to-date',
+  /** 下載進度 0-100 */
+  UPDATE_DOWNLOAD_PROGRESS: 'broadcast:update:download-progress',
+  /** 下載完成（可呼叫 apply） */
+  UPDATE_DOWNLOADED: 'broadcast:update:downloaded',
+  /** 更新錯誤 */
+  UPDATE_ERROR: 'broadcast:update:error',
 } as const;

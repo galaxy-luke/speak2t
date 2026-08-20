@@ -27,10 +27,22 @@ import { AsrManager } from '../functions/asr/manager';
 import { clipboardInjector } from '../functions/injector/clipboard';
 import { modelDownloader } from '../functions/model/downloader';
 import { applyAutoStart } from '../functions/autostart/manager';
+import { initUpdateManager, getUpdateManager } from '../functions/update/manager';
 import { lifecycle } from './lifecycle';
 import { DEFAULT_HOTKEY } from '../shared/constants';
 import type { AppSettings } from '../shared/types';
-import type { DownloadProgressPayload, DownloadCompletePayload, DownloadErrorPayload, DownloadExistsPayload, DownloadCancelledPayload } from '../shared/api';
+import type {
+  DownloadProgressPayload,
+  DownloadCompletePayload,
+  DownloadErrorPayload,
+  DownloadExistsPayload,
+  DownloadCancelledPayload,
+  UpdateAvailablePayload,
+  UpdateUpToDatePayload,
+  UpdateDownloadProgressPayload,
+  UpdateDownloadedPayload,
+  UpdateErrorPayload,
+} from '../shared/api';
 
 // 單一實例鎖
 const gotTheLock = app.requestSingleInstanceLock();
@@ -80,7 +92,11 @@ if (!gotTheLock) {
       applyAutoStart(next.autoStart);
     });
 
-    // 9. macOS 特殊處理（雖然 P0 是 Windows 優先）
+    // 9. 自動更新（P4 Stage 2）
+    initUpdateManager();
+    wireUpdateManager();
+
+    // 10. macOS 特殊處理（雖然 P0 是 Windows 優先）
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         createMainWindow();
@@ -286,6 +302,75 @@ function registerIpcHandlers(): void {
   // 取消下載
   ipcMain.handle(IPC.CANCEL_DOWNLOAD, () => {
     modelDownloader.cancelDownload();
+  });
+
+  // ===== P4 Stage 2：自動更新 IPC =====
+
+  // 觸發檢查
+  ipcMain.handle(IPC.CHECK_UPDATE, () => {
+    getUpdateManager().checkForUpdates();
+  });
+
+  // 套用更新
+  ipcMain.handle(IPC.APPLY_UPDATE, () => {
+    getUpdateManager().quitAndInstall();
+  });
+}
+
+/**
+ * Wire UpdateManager events → broadcast IPC
+ * 同步：dev 模式提示「不檢查」
+ */
+function wireUpdateManager(): void {
+  const m = getUpdateManager();
+  const broadcast = (channel: string, payload: unknown) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send(channel, payload);
+      }
+    }
+  };
+
+  m.on('devMode', () => {
+    broadcast(IPC.UPDATE_DEV_MODE, { currentVersion: m.getCurrentVersion() });
+    console.log('[main] update: dev mode (skip check)');
+  });
+
+  m.on('checking', () => {
+    broadcast(IPC.UPDATE_CHECKING, { timestamp: Date.now() });
+    console.log('[main] update: checking...');
+  });
+
+  m.on('updateAvailable', (data) => {
+    const payload: UpdateAvailablePayload = { ...data, timestamp: Date.now() };
+    broadcast(IPC.UPDATE_AVAILABLE, payload);
+    console.log(`[main] update available: v${data.version}`);
+  });
+
+  m.on('upToDate', () => {
+    const payload: UpdateUpToDatePayload = {
+      currentVersion: m.getCurrentVersion(),
+      timestamp: Date.now(),
+    };
+    broadcast(IPC.UPDATE_UP_TO_DATE, payload);
+    console.log(`[main] update: up-to-date (v${m.getCurrentVersion()})`);
+  });
+
+  m.on('downloadProgress', (percent) => {
+    const payload: UpdateDownloadProgressPayload = { percent, timestamp: Date.now() };
+    broadcast(IPC.UPDATE_DOWNLOAD_PROGRESS, payload);
+  });
+
+  m.on('updateDownloaded', (data) => {
+    const payload: UpdateDownloadedPayload = { ...data, timestamp: Date.now() };
+    broadcast(IPC.UPDATE_DOWNLOADED, payload);
+    console.log(`[main] update downloaded: v${data.version}`);
+  });
+
+  m.on('error', (err) => {
+    const payload: UpdateErrorPayload = { ...err, timestamp: Date.now() };
+    broadcast(IPC.UPDATE_ERROR, payload);
+    console.warn(`[main] update error: ${err.code} - ${err.message}`);
   });
 }
 

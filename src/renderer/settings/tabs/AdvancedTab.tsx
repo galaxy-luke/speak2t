@@ -10,6 +10,7 @@
 import { useState } from 'react';
 import { DEFAULT_SETTINGS, type AppSettings } from '../../../shared/types';
 import { PostprocessPreview } from './PostprocessPreview';
+import { UpdateChecker } from './UpdateChecker';
 
 interface Props {
   saved: AppSettings | null;
@@ -53,6 +54,12 @@ export function AdvancedTab({ saved, onReset }: Props) {
         <h3>後處理規則預覽（P3 Stage 3）</h3>
         <p>預覽 5 句範例套用 postprocess 規則前後的對比。</p>
         <PostprocessPreview />
+      </section>
+
+      <section className="info-box">
+        <h3>自動更新（P4 Stage 2）</h3>
+        <p>從 GitHub Releases 檢查新版本，下載完成後點按鈕重啟安裝。</p>
+        <UpdateChecker currentVersion={saved ? '0.1.0' : '0.1.0'} />
       </section>
 
       <section className="info-box danger-zone">

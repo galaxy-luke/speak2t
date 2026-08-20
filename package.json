@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@kutalia/whisper-node-addon": "^1.1.0",
+    "electron-updater": "^6.8.9",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "sherpa-onnx-node": "^1.13.6"
@@ -74,7 +75,12 @@
     "asar": true,
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "assets/icon.ico",
       "artifactName": "Speak2T-Setup-${version}.${ext}"
@@ -92,6 +98,12 @@
       "icon": "assets/icon-square.png",
       "category": "public.app-category.productivity",
       "artifactName": "Speak2T-${version}-${arch}.${ext}"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "galaxy-luke",
+      "repo": "speak2t",
+      "releaseType": "release"
     }
   }
 }
