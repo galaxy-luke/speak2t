@@ -120,8 +120,12 @@ export function AsrTab({ draft, onChange }: Props) {
         <ModelList
           models={download.models}
           status={download.status}
+          verifications={download.verifications}
+          tofuBaselines={download.tofuBaselines}
           onDownload={download.startDownload}
           onCancel={download.cancelDownload}
+          onVerify={download.verifyModel}
+          onRemoveTofu={download.removeTofu}
           loading={download.loading}
         />
         <div className="download-actions">
@@ -131,6 +135,14 @@ export function AsrTab({ draft, onChange }: Props) {
             disabled={download.loading}
           >
             🔄 重新整理狀態
+          </button>
+          <button
+            className="btn btn-cancel"
+            onClick={() => void download.verifyAll()}
+            disabled={download.loading}
+            title="對所有已下載模型重新算 SHA-256 並比對 baseline"
+          >
+            🔍 全部校驗
           </button>
         </div>
       </section>

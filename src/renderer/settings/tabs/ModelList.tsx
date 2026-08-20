@@ -1,8 +1,8 @@
 /**
- * ModelList 子元件（P2 Stage 2）
+ * ModelList 子元件（P2 Stage 2 + TOFU commit 6）
  *
- * 顯示模型清單 + 下載 UI：
- * - 已下載：打勾 + 路徑 + 重新下載按鈕
+ * 顯示模型清單 + 下載 UI + 5 態校驗標籤：
+ * - 已下載：✅ + 5 態校驗標籤 + 路徑 + 重新下載/重新校驗/清除 TOFU 按鈕
  * - 未下載：下載按鈕
  * - 下載中：進度條 + 速度 + 取消按鈕
  * - 完成 / 失敗 / 取消：狀態訊息（5 秒自動消失）
@@ -10,14 +10,22 @@
  * 給 AsrTab 內嵌。
  */
 
-import type { ModelInfo, DownloadProgressPayload } from '../../../shared/api';
+import type {
+  ModelInfo,
+  DownloadProgressPayload,
+  VerificationResultPayload,
+} from '../../../shared/api';
 import type { DownloadStatus } from '../hooks/useDownloadState';
 
 interface Props {
   models: ModelInfo[];
   status: DownloadStatus;
+  verifications: Record<string, VerificationResultPayload>;
+  tofuBaselines: Record<string, { establishedAt: string; sha256: string; sizeBytes: number }>;
   onDownload: (presetKey: string) => void;
   onCancel: () => void;
+  onVerify: (presetKey: string) => void;
+  onRemoveTofu: (presetKey: string) => void;
   loading: boolean;
 }
 
@@ -39,11 +47,106 @@ function formatTime(sec: number): string {
   return `${m}m${s}s`;
 }
 
-function ModelItem({ model, status, onDownload, onCancel }: {
+/**
+ * 5 態校驗標籤
+ * 優先序：mismatch > official-verified > tofu-verified > no-baseline > not-installed
+ */
+function VerificationBadge({
+  model,
+  verification,
+  hasTofu,
+}: {
+  model: ModelInfo;
+  verification: VerificationResultPayload | undefined;
+  hasTofu: boolean;
+}) {
+  if (!model.installed) {
+    return (
+      <span className="model-sha256 unverified" title="模型未下載">
+        {' '}📦 未下載
+      </span>
+    );
+  }
+
+  // 沒收到 verify event（剛下載完還沒跑 background verify）
+  if (!verification) {
+    if (model.sha256) {
+      return (
+        <span className="model-sha256 unverified" title="尚未跑校驗">
+          {' '}⏳ 待校驗
+        </span>
+      );
+    }
+    if (hasTofu) {
+      return (
+        <span className="model-sha256 unverified" title="TOFU baseline 已建立，待校驗">
+          {' '}⏳ 待校驗
+        </span>
+      );
+    }
+    return (
+      <span className="model-sha256 unverified" title="無官方 / TOFU baseline，無法校驗">
+        {' '}⚠️ 首次使用中
+      </span>
+    );
+  }
+
+  // 收到 verify event → 依 status 渲染
+  switch (verification.status) {
+    case 'official-verified':
+      return (
+        <span
+          className="model-sha256 verified"
+          title={`SHA-256: ${verification.actualHash ?? '?'}`}
+        >
+          {' '}🔵 官方已驗證
+        </span>
+      );
+    case 'tofu-verified':
+      return (
+        <span
+          className="model-sha256 verified"
+          title={`TOFU SHA-256: ${verification.actualHash ?? '?'}`}
+        >
+          {' '}🟢 TOFU 校驗通過
+        </span>
+      );
+    case 'mismatch':
+      return (
+        <span
+          className="model-sha256 mismatch"
+          title={`檔案被竊改 / 損壞\n預期: ${verification.officialSha256 ?? verification.tofuSha256 ?? '?'}\n實際: ${verification.actualHash ?? '?'}\n建議重新下載`}
+        >
+          {' '}❌ 校驗失敗
+        </span>
+      );
+    case 'no-baseline':
+      return (
+        <span
+          className="model-sha256 unverified"
+          title="無官方 / TOFU baseline，無法校驗"
+        >
+          {' '}⚠️ 首次使用中
+        </span>
+      );
+    case 'not-installed':
+      return (
+        <span className="model-sha256 unverified" title="模型檔案不存在">
+          {' '}📦 未安裝
+        </span>
+      );
+  }
+}
+
+function ModelItem({ model, status, verification, hasTofu, onDownload, onCancel, onVerify, onRemoveTofu }: {
   model: ModelInfo;
   status: DownloadStatus;
+  verification: VerificationResultPayload | undefined;
+  hasTofu: boolean;
   onDownload: (k: string) => void;
   onCancel: () => void;
+  onVerify: (k: string) => void;
+  onRemoveTofu: (k: string) => void;
 }) {
   const isDownloading = status.kind === 'downloading' && status.preset === model.key;
   const isJustCompleted = status.kind === 'completed' && status.preset === model.key;
@@ -58,22 +161,25 @@ function ModelItem({ model, status, onDownload, onCancel }: {
         <div className="model-info">
           <div className="model-name">
             {model.installed ? '✅' : '📦'} {model.name}
-            {model.sha256 ? (
-              <span className="model-sha256 verified" title={`SHA-256: ${model.sha256}`}>
-                {' '}🔒 已驗證
-              </span>
-            ) : (
-              <span className="model-sha256 unverified" title="無 baseline SHA-256，無法校驗完整性">
-                {' '}⚠️ 未校驗
-              </span>
-            )}
+            <VerificationBadge model={model} verification={verification} hasTofu={hasTofu} />
           </div>
           <div className="model-desc">{model.description}</div>
           <div className="model-meta">
             <code className="code-mono">{model.path}</code>
+            {verification && verification.actualHash && (
+              <div className="model-hash">
+                實際 SHA-256: <code className="code-mono">{verification.actualHash.slice(0, 16)}…{verification.actualHash.slice(-8)}</code>
+                {' '}({formatBytes(verification.fileSize)})
+              </div>
+            )}
+            {hasTofu && (
+              <div className="model-hash">
+                TOFU baseline：<code className="code-mono">已建立</code>
+              </div>
+            )}
             {model.sha256 && (
               <div className="model-hash">
-                SHA-256: <code className="code-mono">{model.sha256.slice(0, 16)}…{model.sha256.slice(-8)}</code>
+                官方 baseline: <code className="code-mono">{model.sha256.slice(0, 16)}…{model.sha256.slice(-8)}</code>
               </div>
             )}
           </div>
@@ -102,6 +208,34 @@ function ModelItem({ model, status, onDownload, onCancel }: {
           )}
         </div>
       </div>
+
+      {/* TOFU 操作列（已下載才顯示） */}
+      {model.installed && (
+        <div className="model-tofu-actions">
+          <button
+            className="btn btn-tiny"
+            onClick={() => onVerify(model.key)}
+            disabled={isActive}
+            title="重新計算磁碟 SHA-256 並比對 baseline"
+          >
+            🔄 重新校驗
+          </button>
+          {hasTofu && !model.sha256 && (
+            <button
+              className="btn btn-tiny btn-tiny-danger"
+              onClick={() => {
+                if (confirm(`確定要清除「${model.name}」的 TOFU baseline？\n清除後下次下載會重新建立。`)) {
+                  onRemoveTofu(model.key);
+                }
+              }}
+              disabled={isActive}
+              title="清除自建 TOFU baseline（懷疑不可信時用）"
+            >
+              🗑 清除 TOFU
+            </button>
+          )}
+        </div>
+      )}
 
       {isDownloading && (
         <DownloadProgressView progress={status.progress} />
@@ -183,7 +317,17 @@ function DownloadProgressView({ progress }: { progress: DownloadProgressPayload 
   );
 }
 
-export function ModelList({ models, status, onDownload, onCancel, loading }: Props) {
+export function ModelList({
+  models,
+  status,
+  verifications,
+  tofuBaselines,
+  onDownload,
+  onCancel,
+  onVerify,
+  onRemoveTofu,
+  loading,
+}: Props) {
   if (loading && models.length === 0) {
     return <p className="hint">載入模型清單中…</p>;
   }
@@ -198,8 +342,12 @@ export function ModelList({ models, status, onDownload, onCancel, loading }: Pro
           key={m.key}
           model={m}
           status={status}
+          verification={verifications[m.key]}
+          hasTofu={m.key in tofuBaselines}
           onDownload={onDownload}
           onCancel={onCancel}
+          onVerify={onVerify}
+          onRemoveTofu={onRemoveTofu}
         />
       ))}
     </div>

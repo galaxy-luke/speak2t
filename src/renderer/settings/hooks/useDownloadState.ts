@@ -18,6 +18,9 @@ import type {
   DownloadExistsPayload,
   DownloadCancelledPayload,
   DownloadVerifiedPayload,
+  VerificationResultPayload,
+  TofuEstablishedPayload,
+  TofuRemovedPayload,
 } from '../../../shared/api';
 
 export type DownloadStatus =
@@ -50,9 +53,19 @@ export type DownloadStatus =
 export interface UseDownloadStateReturn {
   models: ModelInfo[];
   status: DownloadStatus;
+  /** 每個 preset 的最新校驗結果（key = preset key） */
+  verifications: Record<string, VerificationResultPayload>;
+  /** 哪些 preset 有 TOFU baseline（key = preset key） */
+  tofuBaselines: Record<string, { establishedAt: string; sha256: string; sizeBytes: number }>;
   refresh: () => Promise<void>;
   startDownload: (presetKey: string) => Promise<void>;
   cancelDownload: () => Promise<void>;
+  /** 手動對單一模型做校驗 */
+  verifyModel: (presetKey: string) => Promise<void>;
+  /** 對所有已下載模型做校驗 */
+  verifyAll: () => Promise<void>;
+  /** 清除某個 preset 的 TOFU baseline */
+  removeTofu: (presetKey: string) => Promise<void>;
   loading: boolean;
   error: string | null;
 }
@@ -62,6 +75,10 @@ export function useDownloadState(): UseDownloadStateReturn {
   const [status, setStatus] = useState<DownloadStatus>({ kind: 'idle' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [verifications, setVerifications] = useState<Record<string, VerificationResultPayload>>({});
+  const [tofuBaselines, setTofuBaselines] = useState<
+    Record<string, { establishedAt: string; sha256: string; sizeBytes: number }>
+  >({});
 
   const refresh = useCallback(async () => {
     try {
@@ -133,6 +150,30 @@ export function useDownloadState(): UseDownloadStateReturn {
       });
     });
 
+    // TOFU 自我校驗事件
+    const offTofuEstablished = window.speak2t.onTofuEstablished((data: TofuEstablishedPayload) => {
+      setTofuBaselines((prev) => ({
+        ...prev,
+        [data.preset]: {
+          establishedAt: data.baseline.establishedAt,
+          sha256: data.baseline.sha256,
+          sizeBytes: data.baseline.sizeBytes,
+        },
+      }));
+    });
+    const offTofuRemoved = window.speak2t.onTofuRemoved((data: TofuRemovedPayload) => {
+      setTofuBaselines((prev) => {
+        const next = { ...prev };
+        delete next[data.preset];
+        return next;
+      });
+    });
+    const offVerificationResult = window.speak2t.onVerificationResult(
+      (data: VerificationResultPayload) => {
+        setVerifications((prev) => ({ ...prev, [data.preset]: data }));
+      },
+    );
+
     return () => {
       offProgress();
       offComplete();
@@ -140,8 +181,26 @@ export function useDownloadState(): UseDownloadStateReturn {
       offExists();
       offCancelled();
       offVerified();
+      offTofuEstablished();
+      offTofuRemoved();
+      offVerificationResult();
     };
   }, [refresh]);
+
+  // 初次載入時從 settings 拿 TOFU baselines
+  useEffect(() => {
+    void window.speak2t.getSettings().then((s) => {
+      const map: typeof tofuBaselines = {};
+      for (const [key, t] of Object.entries(s.tofuBaselines)) {
+        map[key] = {
+          establishedAt: t.establishedAt,
+          sha256: t.sha256,
+          sizeBytes: t.sizeBytes,
+        };
+      }
+      setTofuBaselines(map);
+    });
+  }, []);
 
   const startDownload = useCallback(async (presetKey: string) => {
     setError(null);
@@ -162,5 +221,52 @@ export function useDownloadState(): UseDownloadStateReturn {
     }
   }, []);
 
-  return { models, status, refresh, startDownload, cancelDownload, loading, error };
+  const verifyModel = useCallback(async (presetKey: string) => {
+    setError(null);
+    try {
+      const result = await window.speak2t.verifyModel(presetKey);
+      setVerifications((prev) => ({ ...prev, [presetKey]: result }));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`verifyModel failed: ${msg}`);
+    }
+  }, []);
+
+  const verifyAll = useCallback(async () => {
+    setError(null);
+    try {
+      const results = await window.speak2t.verifyAllModels();
+      const next: Record<string, VerificationResultPayload> = {};
+      for (const r of results) next[r.preset] = r;
+      setVerifications(next);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`verifyAllModels failed: ${msg}`);
+    }
+  }, []);
+
+  const removeTofu = useCallback(async (presetKey: string) => {
+    setError(null);
+    try {
+      await window.speak2t.removeTofuBaseline(presetKey);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`removeTofuBaseline failed: ${msg}`);
+    }
+  }, []);
+
+  return {
+    models,
+    status,
+    verifications,
+    tofuBaselines,
+    refresh,
+    startDownload,
+    cancelDownload,
+    verifyModel,
+    verifyAll,
+    removeTofu,
+    loading,
+    error,
+  };
 }
