@@ -1,18 +1,20 @@
 {
   "name": "speak2t",
   "version": "0.1.0",
-  "description": "桌面語音輸入轉文字工具（台灣繁體中文優先，本機處理，隱私優先）",
+  "description": "Desktop voice-to-text input tool for Traditional Chinese (Taiwan). Local processing, privacy-first.",
   "main": "dist/main/index.js",
   "author": "Luke",
   "license": "MIT",
   "private": true,
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "build": "npm run build:renderer && npm run build:main && npm run build:preload",
+    "build": "npm run build:icons && npm run build:renderer && npm run build:main && npm run build:preload",
+    "build:icons": "node scripts/build-icons.mjs",
     "build:renderer": "vite build",
     "build:main": "tsc -p tsconfig.main.json",
     "build:preload": "tsc -p tsconfig.preload.json",
     "build:win": "npm run build && electron-builder --win --x64",
+    "build:win:dir": "npm run build && electron-builder --win --x64 --dir",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.preload.json --noEmit",
     "lint": "eslint . --ext .ts,.tsx",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
@@ -40,6 +42,8 @@
     "eslint": "^9.17.0",
     "eslint-plugin-react": "^7.37.2",
     "eslint-plugin-react-hooks": "^5.1.0",
+    "jimp": "^1.6.1",
+    "png-to-ico": "^3.0.2",
     "prettier": "^3.4.2",
     "typescript": "^5.7.2",
     "vite": "^8.2.1",
@@ -52,28 +56,42 @@
     "appId": "com.luke.speak2t",
     "productName": "Speak2T",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "assets"
     },
     "files": [
       "dist/**/*",
-      "package.json"
+      "package.json",
+      "assets/icon.ico",
+      "assets/tray-icon.png"
     ],
+    "extraResources": [
+      {
+        "from": "assets/icon-square.png",
+        "to": "icon.png"
+      }
+    ],
+    "asar": true,
     "win": {
       "target": [
-        "nsis"
+        { "target": "nsis", "arch": ["x64"] }
       ],
-      "icon": "assets/icon.ico"
+      "icon": "assets/icon.ico",
+      "artifactName": "Speak2T-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "shortcutName": "Speak2T"
     },
     "mac": {
       "target": "dmg",
-      "category": "public.app-category.productivity"
+      "icon": "assets/icon-square.png",
+      "category": "public.app-category.productivity",
+      "artifactName": "Speak2T-${version}-${arch}.${ext}"
     }
   }
 }
