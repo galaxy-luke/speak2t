@@ -26,6 +26,7 @@ import { audioIngest } from '../functions/audio/ingest';
 import { AsrManager } from '../functions/asr/manager';
 import { clipboardInjector } from '../functions/injector/clipboard';
 import { modelDownloader } from '../functions/model/downloader';
+import { applyAutoStart } from '../functions/autostart/manager';
 import { lifecycle } from './lifecycle';
 import { DEFAULT_HOTKEY } from '../shared/constants';
 import type { AppSettings } from '../shared/types';
@@ -73,7 +74,13 @@ if (!gotTheLock) {
     // 7. Model downloader 事件 wiring
     wireModelDownloader();
 
-    // 8. macOS 特殊處理（雖然 P0 是 Windows 優先）
+    // 8. 開機自動啟動套用（P2 Stage 3）
+    applyAutoStart(appState.getSettings().autoStart);
+    appState.on('settings:changed', (next) => {
+      applyAutoStart(next.autoStart);
+    });
+
+    // 9. macOS 特殊處理（雖然 P0 是 Windows 優先）
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         createMainWindow();
