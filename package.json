@@ -18,6 +18,7 @@
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,html}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css,html}\"",
+    "download-model": "node scripts/download-model.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },
