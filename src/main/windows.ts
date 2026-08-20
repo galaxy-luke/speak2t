@@ -15,10 +15,10 @@ let indicatorWindow: BrowserWindow | null = null;
 
 export function createMainWindow(): BrowserWindow {
   mainWindow = new BrowserWindow({
-    width: 800,
-    height: 600,
-    minWidth: 600,
-    minHeight: 400,
+    width: 900,
+    height: 650,
+    minWidth: 720,
+    minHeight: 480,
     show: false,
     title: 'Speak2T 設定',
     webPreferences: {

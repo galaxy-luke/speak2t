@@ -199,12 +199,38 @@ function registerIpcHandlers(): void {
   });
 
   // 儲存設定
-  ipcMain.handle(IPC.SAVE_SETTINGS, (_event, partial: Partial<AppSettings>) => {
+  ipcMain.handle(IPC.SAVE_SETTINGS, async (_event, partial: Partial<AppSettings>) => {
+    const prevSettings = appState.getSettings();
     appState.updateSettings(partial);
 
     // 熱鍵改變時要重新註冊
     if (partial.hotkey) {
       hotkeyManager.register(partial.hotkey);
+    }
+
+    // P2 Stage 1：ASR 引擎或模型變更時自動切換引擎
+    if (
+      asrManager?.initialized &&
+      (partial.asrEngine !== undefined || partial.asrModelPreset !== undefined)
+    ) {
+      const engineChanged = partial.asrEngine !== undefined && partial.asrEngine !== prevSettings.asrEngine;
+      const presetChanged =
+        partial.asrModelPreset !== undefined && partial.asrModelPreset !== prevSettings.asrModelPreset;
+      if (engineChanged || presetChanged) {
+        try {
+          await asrManager.switchEngine(appState.getSettings());
+          console.log(
+            `[main] ASR engine switched: ${prevSettings.asrEngine}/${prevSettings.asrModelPreset} → ${appState.getSettings().asrEngine}/${appState.getSettings().asrModelPreset}`,
+          );
+        } catch (err) {
+          console.error('[main] ASR switch engine failed:', err);
+          // 切換失敗：回滾 settings（避免 UI 顯示不一致）
+          appState.updateSettings({
+            asrEngine: prevSettings.asrEngine,
+            asrModelPreset: prevSettings.asrModelPreset,
+          });
+        }
+      }
     }
 
     return appState.getSettings();
