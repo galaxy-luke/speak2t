@@ -5,13 +5,34 @@
  * P1 階段 4：新增 indicator frameless 浮窗
  */
 
-import { BrowserWindow, screen } from 'electron';
+import { BrowserWindow, screen, app, nativeImage } from 'electron';
 import { join } from 'node:path';
 import { lifecycle } from './lifecycle';
 import { appState } from './app-state';
 
 let mainWindow: BrowserWindow | null = null;
 let indicatorWindow: BrowserWindow | null = null;
+
+/**
+ * 取得應用程式視窗 icon 路徑
+ *
+ * - dev：<cwd>/assets/icon.png
+ * - packaged：<appPath>/assets/icon.png（files include assets/*）
+ *
+ * 若檔案不存在或無法載入，回傳 undefined（Electron fallback 用預設 icon）
+ */
+function resolveAppIcon(): Electron.NativeImage | undefined {
+  const iconPath = app.isPackaged
+    ? join(app.getAppPath(), 'assets', 'icon.png')
+    : join(process.cwd(), 'assets', 'icon.png');
+  try {
+    const img = nativeImage.createFromPath(iconPath);
+    if (img.isEmpty()) return undefined;
+    return img;
+  } catch (_err) {
+    return undefined;
+  }
+}
 
 export function createMainWindow(): BrowserWindow {
   mainWindow = new BrowserWindow({
@@ -21,6 +42,7 @@ export function createMainWindow(): BrowserWindow {
     minHeight: 480,
     show: false,
     title: '聲打 / Speak2T 設定',
+    icon: resolveAppIcon(),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -97,6 +119,7 @@ export function createIndicatorWindow(): BrowserWindow {
     show: false,
     hasShadow: false,
     title: '聲打 / Speak2T Indicator',
+    icon: resolveAppIcon(),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
